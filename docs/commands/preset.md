@@ -40,14 +40,11 @@ Targets:
   • cloudrun
   • cloudrun-job
   • docker
-  • fly
   • helm
   • kubernetes
   • lambda
-  • netlify
   • s3
   • s3-static
-  • vercel
 
 Usage in bear.config.yml:
   use:

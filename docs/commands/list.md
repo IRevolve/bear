@@ -31,7 +31,7 @@ Discovered Artifacts
 Services:
   • user-api (services/user-api) → cloudrun
   • order-api (services/order-api) → cloudrun
-  • dashboard (apps/dashboard) → vercel
+  • dashboard (apps/dashboard) → docker
 
 Libraries:
   • shared-lib (libs/shared)

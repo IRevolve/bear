@@ -13,7 +13,7 @@ A Terraform-inspired CI/CD tool for monorepos. Bear detects changes, resolves de
 - :books: **Library support** — Validate-only artifacts
 - :arrows_counterclockwise: **Rollback** — Redeploy any previous version
 - :globe_with_meridians: **Multi-language** — Go, Node, Python, Rust, Java, TypeScript
-- :dart: **Many targets** — Docker, CloudRun, Kubernetes, Lambda, S3, Fly, Vercel
+- :dart: **Many targets** — Docker, CloudRun, Kubernetes, Lambda, S3, Helm
 
 </div>
 
