@@ -1,7 +1,13 @@
 package main
 
-import "fmt"
+import (
+	"os"
+
+	"github.com/IRevolve/Bear/cmd/commands"
+)
 
 func main() {
-	fmt.Println("Hallo, Welt!")
+	if err := commands.Execute(); err != nil {
+		os.Exit(1)
+	}
 }
