@@ -64,9 +64,101 @@ jobs:
     if: "!contains(github.event.head_commit.message, '[skip ci]')"
 ```
 
-## GitHub Actions Example
+## Using Docker Images
 
-Complete workflow for Bear:
+Bear provides official Docker images for easy CI integration without installing Go:
+
+| Image | Size | Use Case |
+|-------|------|----------|
+| `ghcr.io/irevolve/bear:latest` | ~5MB | Minimal, just Bear binary |
+| `ghcr.io/irevolve/bear:0.4.0-alpine` | ~15MB | With Git and shell |
+| `ghcr.io/irevolve/bear:0.4.0-debian` | ~50MB | Full environment |
+
+!!! tip "Which image to choose?"
+    - Use `:latest` (scratch) for pure `plan`/`apply` without `--commit`
+    - Use `-alpine` or `-debian` when you need `--commit` (requires Git)
+
+### GitHub Actions with Docker
+
+```yaml title=".github/workflows/deploy.yml"
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - 'bear.lock.yml'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/irevolve/bear:latest
+    
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: Plan
+        run: bear plan
+      
+      - name: Apply
+        run: bear apply
+
+  # Or with --commit (requires Git)
+  deploy-with-commit:
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/irevolve/bear:0.4.0-alpine
+    
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: Configure Git
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git config --global --add safe.directory $GITHUB_WORKSPACE
+      
+      - name: Apply with commit
+        run: bear apply --commit
+```
+
+### GitLab CI with Docker
+
+```yaml title=".gitlab-ci.yml"
+deploy:
+  image: ghcr.io/irevolve/bear:0.4.0-alpine
+  stage: deploy
+  
+  before_script:
+    - git config --global user.name "GitLab CI"
+    - git config --global user.email "ci@gitlab.com"
+  
+  script:
+    - bear plan
+    - bear apply --commit
+```
+
+### Generic Docker Usage
+
+```bash
+# Run plan in any CI
+docker run --rm -v $(pwd):/workspace -w /workspace \
+  ghcr.io/irevolve/bear:latest plan
+
+# Run apply
+docker run --rm -v $(pwd):/workspace -w /workspace \
+  -e DOCKER_USERNAME -e DOCKER_PASSWORD \
+  ghcr.io/irevolve/bear:latest apply
+```
+
+## GitHub Actions Example (without Docker)
+
+Complete workflow installing Bear from source:
 
 ```yaml title=".github/workflows/deploy.yml"
 name: Deploy
