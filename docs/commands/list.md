@@ -1,0 +1,46 @@
+# bear list
+
+List all discovered artifacts.
+
+## Usage
+
+```bash
+bear list [flags]
+```
+
+## Description
+
+Scans the project for `bear.artifact.yml` and `bear.lib.yml` files and displays all discovered artifacts.
+
+## Examples
+
+```bash
+# List all artifacts
+bear list
+
+# List artifacts in a different directory
+bear list -d ./my-project
+```
+
+## Output
+
+```
+Discovered Artifacts
+====================
+
+Services:
+  • user-api (services/user-api) → cloudrun
+  • order-api (services/order-api) → cloudrun
+  • dashboard (apps/dashboard) → vercel
+
+Libraries:
+  • shared-lib (libs/shared)
+  • ui-components (libs/ui)
+
+Total: 5 artifacts (3 services, 2 libraries)
+```
+
+## See Also
+
+- [Artifacts](../configuration/artifacts.md)
+- [bear check](check.md)

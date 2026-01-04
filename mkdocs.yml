@@ -1,0 +1,81 @@
+site_name: Bear
+site_description: A Terraform-inspired CI/CD tool for monorepos
+site_url: https://irevolve.github.io/Bear
+repo_url: https://github.com/IRevolve/Bear
+repo_name: IRevolve/Bear
+
+theme:
+  name: material
+  icon:
+    repo: fontawesome/brands/github
+  palette:
+    - scheme: default
+      primary: brown
+      accent: orange
+      toggle:
+        icon: material/brightness-7
+        name: Dark mode
+    - scheme: slate
+      primary: brown
+      accent: orange
+      toggle:
+        icon: material/brightness-4
+        name: Light mode
+  features:
+    - navigation.instant
+    - navigation.tracking
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - search.highlight
+    - search.share
+    - content.code.copy
+    - content.code.annotate
+
+nav:
+  - Home: index.md
+  - Getting Started:
+    - Installation: getting-started/installation.md
+    - Quick Start: getting-started/quickstart.md
+  - Configuration:
+    - Project Config: configuration/project.md
+    - Artifacts: configuration/artifacts.md
+    - Presets: configuration/presets.md
+  - Commands:
+    - Overview: commands/index.md
+    - init: commands/init.md
+    - plan: commands/plan.md
+    - apply: commands/apply.md
+    - list: commands/list.md
+    - check: commands/check.md
+    - tree: commands/tree.md
+    - preset: commands/preset.md
+  - Concepts:
+    - Change Detection: concepts/change-detection.md
+    - Dependencies: concepts/dependencies.md
+    - Lock File: concepts/lock-file.md
+    - Rollback: concepts/rollback.md
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+  - tables
+  - toc:
+      permalink: true
+
+plugins:
+  - search
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/IRevolve/Bear

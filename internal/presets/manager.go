@@ -15,10 +15,10 @@ import (
 const (
 	// DefaultPresetsRepo ist das Standard-Repository für Presets
 	DefaultPresetsRepo = "https://raw.githubusercontent.com/IRevolve/bear-presets/main"
-	
+
 	// CacheDir ist der lokale Cache-Ordner
 	CacheDir = ".bear/presets"
-	
+
 	// CacheTTL ist die Gültigkeitsdauer des Caches
 	CacheTTL = 24 * time.Hour
 )
@@ -196,13 +196,13 @@ func (m *Manager) writeCache(path string, data []byte) error {
 // download lädt eine URL herunter
 func (m *Manager) download(url string) ([]byte, error) {
 	client := &http.Client{Timeout: 10 * time.Second}
-	
+
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request for %s: %w", url, err)
 	}
 	req.Header.Set("User-Agent", "Bear-CI/1.0")
-	
+
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch %s: %w", url, err)
