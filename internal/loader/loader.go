@@ -33,6 +33,8 @@ func resolveLanguages(cfg *config.Config) error {
 		return nil
 	}
 
+	manager := presets.NewManager()
+
 	// Erstelle Map der bereits definierten Languages
 	existing := make(map[string]bool)
 	for _, lang := range cfg.Languages {
@@ -42,9 +44,15 @@ func resolveLanguages(cfg *config.Config) error {
 	// Füge Presets am Anfang hinzu (können überschrieben werden)
 	var presetLangs []config.Language
 	for _, name := range cfg.Use.Languages {
-		preset, ok := presets.GetLanguage(name)
-		if !ok {
-			return fmt.Errorf("unknown language preset: %s (available: %v)", name, presets.ListLanguages())
+		// Versuche zuerst vom Remote zu laden
+		preset, err := manager.GetLanguage(name)
+		if err != nil {
+			// Fallback auf eingebettete Presets
+			var ok bool
+			preset, ok = presets.GetLanguage(name)
+			if !ok {
+				return fmt.Errorf("unknown language preset: %s", name)
+			}
 		}
 		// Nur hinzufügen wenn nicht bereits definiert
 		if !existing[name] {
@@ -64,6 +72,8 @@ func resolveTargets(cfg *config.Config) error {
 		return nil
 	}
 
+	manager := presets.NewManager()
+
 	// Erstelle Map der bereits definierten Targets
 	existing := make(map[string]bool)
 	for _, target := range cfg.Targets {
@@ -73,9 +83,15 @@ func resolveTargets(cfg *config.Config) error {
 	// Füge Presets am Anfang hinzu
 	var presetTargets []config.TargetTemplate
 	for _, name := range cfg.Use.Targets {
-		preset, ok := presets.GetTarget(name)
-		if !ok {
-			return fmt.Errorf("unknown target preset: %s (available: %v)", name, presets.ListTargets())
+		// Versuche zuerst vom Remote zu laden
+		preset, err := manager.GetTarget(name)
+		if err != nil {
+			// Fallback auf eingebettete Presets
+			var ok bool
+			preset, ok = presets.GetTarget(name)
+			if !ok {
+				return fmt.Errorf("unknown target preset: %s", name)
+			}
 		}
 		if !existing[name] {
 			presetTargets = append(presetTargets, preset)

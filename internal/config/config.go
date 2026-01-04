@@ -62,7 +62,7 @@ type UseConfig struct {
 // Config ist die Hauptkonfiguration (build.bear)
 type Config struct {
 	Name      string           `yaml:"name"`
-	Use       UseConfig        `yaml:"use,omitempty"`     // Importiert vordefinierte Presets
+	Use       UseConfig        `yaml:"use,omitempty"` // Importiert vordefinierte Presets
 	Languages []Language       `yaml:"languages"`
 	Targets   []TargetTemplate `yaml:"targets,omitempty"`
 }

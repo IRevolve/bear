@@ -12,8 +12,9 @@ A Terraform-inspired CI/CD tool for monorepos. Bear detects changes, resolves de
 - 🔒 **Lock file** — Track deployed versions per artifact
 - 📚 **Library support** — Validate-only artifacts (no deploy)
 - ⏪ **Rollback** — Redeploy any previous version
-- 🌍 **Multi-language** — Go, Node.js, Python, Rust (extensible)
-- 🎯 **Configurable targets** — CloudRun, Lambda, S3, Docker, custom
+- 🌍 **Multi-language** — Go, Node.js, Python, Rust, Java, TypeScript (extensible)
+- 🎯 **Configurable targets** — Docker, CloudRun, Kubernetes, Lambda, S3, Fly, Vercel, Netlify
+- 📦 **Community presets** — Import pre-built language and target configs from [bear-presets](https://github.com/IRevolve/bear-presets)
 
 ## Installation
 
@@ -31,7 +32,37 @@ go build -o bear ./cmd/main.go
 
 ## Quick Start
 
-### 1. Create a project config
+### 1. Initialize a project
+
+```bash
+bear init
+```
+
+This creates `bear.config.yml` with auto-detected languages.
+
+### 2. Use presets (recommended)
+
+Instead of defining languages and targets manually, use community presets:
+
+```yaml
+# bear.config.yml
+name: my-platform
+
+use:
+  languages: [go, node]
+  targets: [docker, cloudrun]
+```
+
+View available presets:
+
+```bash
+bear preset list              # Show all available presets
+bear preset show language go  # Show language details
+bear preset show target docker # Show target details
+bear preset update            # Refresh preset cache from GitHub
+```
+
+### 3. Or define custom languages/targets
 
 ```yaml
 # bear.config.yml
@@ -68,7 +99,7 @@ targets:
         run: gcloud run deploy $NAME --image gcr.io/$PROJECT/$NAME:$VERSION
 ```
 
-### 2. Add artifact configs
+### 4. Add artifact configs
 
 ```yaml
 # services/user-api/bear.artifact.yml
@@ -78,6 +109,8 @@ depends:
   - shared-lib
 params:
   MEMORY: 1Gi
+env:
+  PROJECT: my-gcp-project
 ```
 
 For libraries (validate-only, no deploy):
@@ -87,7 +120,7 @@ For libraries (validate-only, no deploy):
 name: shared-lib
 ```
 
-### 3. Run Bear
+### 5. Run Bear
 
 ```bash
 # List all artifacts
@@ -116,9 +149,15 @@ bear plan -d ./other-project
 
 | Command | Description |
 |---------|-------------|
+| `bear init` | Initialize a new Bear project |
 | `bear list` | List all discovered artifacts |
 | `bear plan [artifacts...]` | Show planned validations and deployments |
 | `bear apply [artifacts...]` | Execute the plan (validate, then deploy) |
+| `bear check` | Validate configuration and dependencies |
+| `bear tree [artifact]` | Show dependency tree |
+| `bear preset list` | Show available presets |
+| `bear preset show <type> <name>` | Show preset details |
+| `bear preset update` | Refresh preset cache |
 
 ### Global Flags
 
@@ -279,3 +318,40 @@ These variables are available in deployment steps:
 ## License
 
 MIT
+
+---
+
+## Presets
+
+Bear loads community presets from [bear-presets](https://github.com/IRevolve/bear-presets). Presets are cached locally in `~/.bear/presets/` for 24 hours.
+
+### Available Languages
+
+| Language | Detection | Steps |
+|----------|-----------|-------|
+| `go` | `go.mod` | download, vet, test, build |
+| `node` | `package.json` | install, lint, test, build |
+| `typescript` | `tsconfig.json` | install, typecheck, lint, test, build |
+| `python` | `requirements.txt` | venv, install, lint, test |
+| `rust` | `Cargo.toml` | check, clippy, test, build |
+| `java` | `pom.xml` | compile, test, package |
+
+### Available Targets
+
+| Target | Description |
+|--------|-------------|
+| `docker` | Build and push Docker images |
+| `cloudrun` | Deploy to Google Cloud Run |
+| `cloudrun-job` | Deploy Cloud Run jobs |
+| `kubernetes` | Apply Kubernetes manifests |
+| `helm` | Deploy with Helm charts |
+| `lambda` | Deploy AWS Lambda functions |
+| `s3` | Deploy to S3 buckets |
+| `s3-static` | Deploy static sites to S3 |
+| `fly` | Deploy to Fly.io |
+| `vercel` | Deploy to Vercel |
+| `netlify` | Deploy to Netlify |
+
+### Contributing Presets
+
+Want to add or improve a preset? Contribute to [bear-presets](https://github.com/IRevolve/bear-presets)!
