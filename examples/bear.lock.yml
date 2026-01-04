@@ -1,16 +1,14 @@
+# Bear Lock File - tracks deployed artifact versions
+# Do not edit manually
+
 artifacts:
-    dashboard:
-        commit: abc1234567890
-        timestamp: "2026-01-03T10:00:00Z"
-        version: abc1234
-        target: s3-static
-    hello-api:
-        commit: cc11d26c7ae8e22ffab9a3bf98954e4095d3fb07
-        timestamp: "2026-01-04T14:42:02Z"
-        version: cc11d26
-        target: local-binary
-    user-api:
-        commit: abc1234567890
-        timestamp: "2026-01-03T10:00:00Z"
-        version: abc1234
-        target: cloudrun
+  user-api:
+    commit: abc1234567890
+    timestamp: "2026-01-03T10:00:00Z"
+    version: abc1234
+    target: cloudrun
+  dashboard:
+    commit: abc1234567890
+    timestamp: "2026-01-03T10:00:00Z"
+    version: abc1234
+    target: s3-static
