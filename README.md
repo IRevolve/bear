@@ -116,6 +116,7 @@ bear apply --dry-run
 | `bear list [path]` | List all discovered artifacts |
 | `bear plan [path]` | Show planned validations and deployments |
 | `bear apply [path]` | Execute the plan (validate, then deploy) |
+| `bear unpin <artifact>` | Unpin artifacts to allow automatic updates |
 
 ### Global Flags
 
@@ -123,7 +124,25 @@ bear apply --dry-run
 |------|-------------|
 | `-a, --artifact <name>` | Target specific artifact(s) |
 | `--dry-run` | Show what would happen without executing |
-| `--rollback <commit>` | Rollback to a specific commit |
+| `--rollback <commit>` | Rollback and pin to a specific commit |
+
+### Rollback & Pinning
+
+When you rollback an artifact, it gets **pinned** to that version:
+
+```bash
+# Rollback user-api to commit abc1234 (pins the artifact)
+bear apply -a user-api --rollback=abc1234
+
+# Future applies will skip pinned artifacts
+bear plan  # Shows: user-api 📌 PINNED
+
+# Unpin to allow updates again
+bear unpin user-api
+
+# Or unpin all
+bear unpin --all
+```
 
 ## How It Works
 

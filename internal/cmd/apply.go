@@ -129,13 +129,22 @@ func ApplyWithOptions(configPath string, opts Options) error {
 			}
 
 			// Update Lock-Datei nach erfolgreichem Deployment
-			// Bei Rollback speichern wir den Rollback-Commit
-			plan.LockFile.UpdateArtifact(
-				d.Artifact.Artifact.Name,
-				deployVersion,
-				d.Artifact.Artifact.Target,
-				deployVersion[:min(7, len(deployVersion))],
-			)
+			// Bei Rollback wird das Artifact gepinnt
+			if opts.RollbackCommit != "" {
+				plan.LockFile.UpdateArtifactPinned(
+					d.Artifact.Artifact.Name,
+					deployVersion,
+					d.Artifact.Artifact.Target,
+					deployVersion[:min(7, len(deployVersion))],
+				)
+			} else {
+				plan.LockFile.UpdateArtifact(
+					d.Artifact.Artifact.Name,
+					deployVersion,
+					d.Artifact.Artifact.Target,
+					deployVersion[:min(7, len(deployVersion))],
+				)
+			}
 
 			fmt.Println()
 		}

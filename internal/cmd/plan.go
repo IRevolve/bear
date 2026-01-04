@@ -139,10 +139,15 @@ func printPlan(plan *planner.Plan, rootPath string, opts Options) {
 		fmt.Println()
 		for _, s := range skips {
 			lastCommit := ""
+			isPinned := false
 			if plan.LockFile != nil {
 				lastCommit = plan.LockFile.GetLastDeployedCommit(s.Artifact.Artifact.Name)
+				isPinned = plan.LockFile.IsPinned(s.Artifact.Artifact.Name)
 			}
-			if lastCommit != "" {
+
+			if isPinned {
+				fmt.Printf("  - %s 📌 PINNED (version: %s)\n", s.Artifact.Artifact.Name, lastCommit[:min(7, len(lastCommit))])
+			} else if lastCommit != "" {
 				fmt.Printf("  - %s (deployed: %s)\n", s.Artifact.Artifact.Name, lastCommit[:min(7, len(lastCommit))])
 			} else {
 				fmt.Printf("  - %s\n", s.Artifact.Artifact.Name)
