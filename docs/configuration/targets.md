@@ -236,37 +236,6 @@ params:
           --set image.tag=$VERSION
 ```
 
-### Fly.io
-
-```yaml
-- name: fly
-  deploy:
-    - name: Deploy to Fly
-      run: fly deploy --app $APP --image $REGISTRY/$NAME:$VERSION
-```
-
-### Vercel
-
-```yaml
-- name: vercel
-  deploy:
-    - name: Build
-      run: npm run build
-    - name: Deploy to Vercel
-      run: vercel deploy --prod --yes
-```
-
-### Netlify
-
-```yaml
-- name: netlify
-  deploy:
-    - name: Build
-      run: npm run build
-    - name: Deploy to Netlify
-      run: netlify deploy --prod --dir=dist --site=$SITE_ID
-```
-
 ## Multi-Step Deployments
 
 Targets can have multiple steps that run in sequence:

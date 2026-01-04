@@ -92,25 +92,6 @@ var Targets = map[string]config.TargetTemplate{
 			{Name: "Upgrade", Run: "helm upgrade --install $NAME ./chart --set image.tag=$VERSION -n $NAMESPACE"},
 		},
 	},
-	"fly": {
-		Name: "fly",
-		Deploy: []config.Step{
-			{Name: "Deploy", Run: "fly deploy --image $NAME:$VERSION"},
-		},
-	},
-	"vercel": {
-		Name: "vercel",
-		Deploy: []config.Step{
-			{Name: "Deploy", Run: "vercel --prod"},
-		},
-	},
-	"netlify": {
-		Name: "netlify",
-		Deploy: []config.Step{
-			{Name: "Build", Run: "npm run build"},
-			{Name: "Deploy", Run: "netlify deploy --prod --dir=dist"},
-		},
-	},
 }
 
 // GetTarget gibt ein vordefiniertes Target zurück

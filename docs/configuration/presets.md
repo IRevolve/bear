@@ -32,14 +32,11 @@ use:
 | `docker` | Build and push Docker images | `REGISTRY` |
 | `cloudrun` | Deploy to Google Cloud Run | `PROJECT`, `REGION` |
 | `cloudrun-job` | Deploy Cloud Run jobs | `PROJECT`, `REGION` |
-| `kubernetes` | Apply Kubernetes manifests | `NAMESPACE` |
-| `helm` | Deploy with Helm charts | `NAMESPACE`, `RELEASE` |
-| `lambda` | Deploy AWS Lambda functions | `FUNCTION_NAME`, `REGION` |
+| `kubernetes` | Apply Kubernetes manifests | `NAMESPACE`, `REGISTRY` |
+| `helm` | Deploy with Helm charts | `NAMESPACE`, `REGISTRY` |
+| `lambda` | Deploy AWS Lambda functions | `REGION` |
 | `s3` | Deploy to S3 buckets | `BUCKET` |
-| `s3-static` | Deploy static sites to S3 + CloudFront | `BUCKET`, `DISTRIBUTION_ID` |
-| `fly` | Deploy to Fly.io | `APP` |
-| `vercel` | Deploy to Vercel | — |
-| `netlify` | Deploy to Netlify | `SITE_ID` |
+| `s3-static` | Deploy static sites to S3 + CloudFront | `BUCKET`, `CF_DIST` |
 
 ## Preset Commands
 
@@ -66,8 +63,10 @@ Languages:
 Targets:
   • cloudrun
   • docker
-  • fly
   • kubernetes
+  • helm
+  • lambda
+  • s3
   ...
 ```
 

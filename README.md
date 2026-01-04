@@ -13,7 +13,7 @@ A Terraform-inspired CI/CD tool for monorepos. Bear detects changes, resolves de
 - 📚 **Library support** — Validate-only artifacts (no deploy)
 - ⏪ **Rollback** — Redeploy any previous version
 - 🌍 **Multi-language** — Go, Node.js, Python, Rust, Java, TypeScript (extensible)
-- 🎯 **Configurable targets** — Docker, CloudRun, Kubernetes, Lambda, S3, Fly, Vercel, Netlify
+- 🎯 **Configurable targets** — Docker, CloudRun, Kubernetes, Lambda, S3, Helm
 - 📦 **Community presets** — Import pre-built language and target configs from [bear-presets](https://github.com/IRevolve/bear-presets)
 
 ## Installation
@@ -348,9 +348,6 @@ Bear loads community presets from [bear-presets](https://github.com/IRevolve/bea
 | `lambda` | Deploy AWS Lambda functions |
 | `s3` | Deploy to S3 buckets |
 | `s3-static` | Deploy static sites to S3 |
-| `fly` | Deploy to Fly.io |
-| `vercel` | Deploy to Vercel |
-| `netlify` | Deploy to Netlify |
 
 ### Contributing Presets
 
