@@ -24,6 +24,12 @@ lock file to determine what needs to be built and deployed.`,
 			workDir = args[0]
 		}
 
+		// Konvertiere zu absolutem Pfad
+		workDir, err := filepath.Abs(workDir)
+		if err != nil {
+			return fmt.Errorf("invalid path: %w", err)
+		}
+
 		configPath := filepath.Join(workDir, "bear.config.yml")
 		if _, err := os.Stat(configPath); os.IsNotExist(err) {
 			return fmt.Errorf("config file not found: %s", configPath)

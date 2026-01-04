@@ -90,3 +90,27 @@ targets:
         run: aws s3 sync ./dist s3://$BUCKET --delete
       - name: Invalidate
         run: aws cloudfront create-invalidation --distribution-id $CF_DIST --paths "/*"
+
+  - name: docker-local
+    defaults:
+      PORT: 8080
+    deploy:
+      - name: Build Image
+        run: docker build -t $NAME:$VERSION .
+      - name: Stop Existing
+        run: docker stop $NAME 2>/dev/null || true
+      - name: Remove Existing
+        run: docker rm $NAME 2>/dev/null || true
+      - name: Start Container
+        run: docker run -d --name $NAME -p $PORT:$PORT $NAME:$VERSION
+
+  - name: local-binary
+    defaults:
+      OUTPUT_DIR: ./dist
+    deploy:
+      - name: Create Output Dir
+        run: mkdir -p $OUTPUT_DIR
+      - name: Copy Binary
+        run: cp dist/app $OUTPUT_DIR/$NAME
+      - name: Show Result
+        run: ls -la $OUTPUT_DIR/$NAME && echo "✅ Deployed $NAME version $VERSION"

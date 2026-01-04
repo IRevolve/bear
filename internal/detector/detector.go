@@ -18,6 +18,9 @@ func GetChangedFiles(rootPath string, baseBranch string) ([]ChangedFile, error) 
 		baseBranch = "main"
 	}
 
+	// Hole Git-Root-Verzeichnis
+	gitRoot := getGitRoot(rootPath)
+
 	var allFiles []ChangedFile
 
 	// 1. Hole Änderungen zwischen base branch und HEAD (ignoriere Whitespace)
@@ -48,10 +51,34 @@ func GetChangedFiles(rootPath string, baseBranch string) ([]ChangedFile, error) 
 		}
 	}
 
+	// Konvertiere Pfade von git-root-relativ zu workspace-relativ
+	workspacePrefix := ""
+	if gitRoot != "" && rootPath != gitRoot {
+		// Berechne den relativen Pfad vom Git-Root zum Workspace
+		relPath, err := filepath.Rel(gitRoot, rootPath)
+		if err == nil && relPath != "." {
+			workspacePrefix = relPath + "/"
+		}
+	}
+
+	// Filtere Dateien die im Workspace sind und konvertiere Pfade
+	var filteredFiles []ChangedFile
+	for _, f := range allFiles {
+		if workspacePrefix == "" {
+			filteredFiles = append(filteredFiles, f)
+		} else if strings.HasPrefix(f.Path, workspacePrefix) {
+			// Entferne Workspace-Prefix für lokale Pfade
+			filteredFiles = append(filteredFiles, ChangedFile{
+				Status: f.Status,
+				Path:   strings.TrimPrefix(f.Path, workspacePrefix),
+			})
+		}
+	}
+
 	// Dedupliziere
 	seen := make(map[string]bool)
 	var uniqueFiles []ChangedFile
-	for _, f := range allFiles {
+	for _, f := range filteredFiles {
 		if !seen[f.Path] {
 			seen[f.Path] = true
 			uniqueFiles = append(uniqueFiles, f)
@@ -59,6 +86,17 @@ func GetChangedFiles(rootPath string, baseBranch string) ([]ChangedFile, error) 
 	}
 
 	return uniqueFiles, nil
+}
+
+// getGitRoot gibt das Wurzelverzeichnis des Git-Repositories zurück
+func getGitRoot(path string) string {
+	cmd := exec.Command("git", "rev-parse", "--show-toplevel")
+	cmd.Dir = path
+	output, err := cmd.Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(output))
 }
 
 // GetChangedFilesFromCommit gibt geänderte Dateien seit einem Commit zurück
