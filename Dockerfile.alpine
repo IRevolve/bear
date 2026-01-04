@@ -9,9 +9,10 @@ COPY . .
 
 RUN CGO_ENABLED=0 go build -ldflags="-s -w" -o bear ./cmd/main.go
 
-FROM scratch
+FROM alpine:3.20
 
-COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
-COPY --from=builder /app/bear /bear
+RUN apk add --no-cache ca-certificates git
 
-ENTRYPOINT ["/bear"]
+COPY --from=builder /app/bear /usr/local/bin/bear
+
+ENTRYPOINT ["bear"]
