@@ -317,7 +317,7 @@ These variables are available in deployment steps:
 
 ## License
 
-MIT
+Apache 2.0
 
 ---
 
