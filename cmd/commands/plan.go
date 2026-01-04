@@ -10,35 +10,36 @@ import (
 )
 
 var planCmd = &cobra.Command{
-	Use:   "plan [path]",
+	Use:   "plan [artifacts...]",
 	Short: "Show what would be validated/deployed based on changes",
 	Long: `Creates an execution plan showing which artifacts have changed
 and what actions would be taken (validate, deploy, skip).
 
 The plan compares each artifact against its last deployed commit
-(from bear.lock.yml) to determine what needs to be built and deployed.`,
-	Args: cobra.MaximumNArgs(1),
-	RunE: func(c *cobra.Command, args []string) error {
-		workDir := "."
-		if len(args) > 0 {
-			workDir = args[0]
-		}
+(from bear.lock.yml) to determine what needs to be built and deployed.
 
+Examples:
+  bear plan                      # Plan all changed artifacts
+  bear plan user-api             # Plan specific artifact
+  bear plan user-api order-api   # Plan multiple artifacts
+  bear plan -d ./other-project   # Plan in different directory`,
+	RunE: func(c *cobra.Command, args []string) error {
 		// Konvertiere zu absolutem Pfad
-		workDir, err := filepath.Abs(workDir)
+		absDir, err := filepath.Abs(workDir)
 		if err != nil {
 			return fmt.Errorf("invalid path: %w", err)
 		}
 
-		configPath := filepath.Join(workDir, "bear.config.yml")
+		configPath := filepath.Join(absDir, "bear.config.yml")
 		if _, err := os.Stat(configPath); os.IsNotExist(err) {
 			return fmt.Errorf("config file not found: %s", configPath)
 		}
 
 		opts := cmd.Options{
-			Artifacts:      artifacts,
+			Artifacts:      args, // Positional args sind die Artefakte
 			RollbackCommit: rollback,
 			DryRun:         dryRun,
+			Force:          force,
 		}
 
 		return cmd.PlanWithOptions(configPath, opts)

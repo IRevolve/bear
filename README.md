@@ -100,31 +100,34 @@ bear plan
 bear apply
 
 # Target specific artifacts
-bear plan -a user-api -a order-api
+bear plan user-api order-api
 
 # Rollback to a previous version
-bear apply -a user-api --rollback=abc1234
+bear apply user-api --rollback=abc1234
 
 # Dry run (no actual execution)
 bear apply --dry-run
+
+# Different project directory
+bear plan -d ./other-project
 ```
 
 ## Commands
 
 | Command | Description |
 |---------|-------------|
-| `bear list [path]` | List all discovered artifacts |
-| `bear plan [path]` | Show planned validations and deployments |
-| `bear apply [path]` | Execute the plan (validate, then deploy) |
-| `bear unpin <artifact>` | Unpin artifacts to allow automatic updates |
+| `bear list` | List all discovered artifacts |
+| `bear plan [artifacts...]` | Show planned validations and deployments |
+| `bear apply [artifacts...]` | Execute the plan (validate, then deploy) |
 
 ### Global Flags
 
 | Flag | Description |
 |------|-------------|
-| `-a, --artifact <name>` | Target specific artifact(s) |
+| `-d, --dir <path>` | Path to project directory (default: `.`) |
 | `--dry-run` | Show what would happen without executing |
 | `--rollback <commit>` | Rollback and pin to a specific commit |
+| `-f, --force` | Force operation, ignore pinned artifacts |
 
 ### Rollback & Pinning
 
@@ -132,16 +135,13 @@ When you rollback an artifact, it gets **pinned** to that version:
 
 ```bash
 # Rollback user-api to commit abc1234 (pins the artifact)
-bear apply -a user-api --rollback=abc1234
+bear apply user-api --rollback=abc1234
 
 # Future applies will skip pinned artifacts
 bear plan  # Shows: user-api 📌 PINNED
 
-# Unpin to allow updates again
-bear unpin user-api
-
-# Or unpin all
-bear unpin --all
+# Force apply to override pin (removes the pin)
+bear apply user-api --force
 ```
 
 ## How It Works

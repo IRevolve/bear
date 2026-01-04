@@ -44,6 +44,7 @@ type Plan struct {
 type PlanOptions struct {
 	Artifacts      []string // Nur diese Artefakte berücksichtigen
 	RollbackCommit string   // Rollback zu diesem Commit
+	Force          bool     // Ignoriert gepinnte Artefakte
 }
 
 // CreatePlan erstellt einen Ausführungsplan basierend auf Änderungen
@@ -93,11 +94,12 @@ func CreatePlanWithOptions(rootPath string, cfg *config.Config, opts PlanOptions
 		relPath, _ := filepath.Rel(rootPath, artifact.Path)
 
 		// Prüfe ob Artifact gepinnt ist (z.B. nach Rollback)
-		if lockFile.IsPinned(artifact.Artifact.Name) {
+		// --force ignoriert Pins
+		if !opts.Force && lockFile.IsPinned(artifact.Artifact.Name) {
 			plan.Actions = append(plan.Actions, PlannedAction{
 				Artifact: artifact,
 				Action:   ActionSkip,
-				Reason:   "pinned (use --unpin to unlock)",
+				Reason:   "pinned (use --force to override)",
 			})
 			plan.ToSkip++
 			continue

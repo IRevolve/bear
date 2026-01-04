@@ -30,6 +30,7 @@ func ApplyWithOptions(configPath string, opts Options) error {
 	planOpts := planner.PlanOptions{
 		Artifacts:      opts.Artifacts,
 		RollbackCommit: opts.RollbackCommit,
+		Force:          opts.Force,
 	}
 
 	plan, err := planner.CreatePlanWithOptions(rootPath, cfg, planOpts)
@@ -129,8 +130,8 @@ func ApplyWithOptions(configPath string, opts Options) error {
 			}
 
 			// Update Lock-Datei nach erfolgreichem Deployment
-			// Bei Rollback wird das Artifact gepinnt
-			if opts.RollbackCommit != "" {
+			// Bei Rollback wird das Artifact gepinnt (außer mit --force)
+			if opts.RollbackCommit != "" && !opts.Force {
 				plan.LockFile.UpdateArtifactPinned(
 					d.Artifact.Artifact.Name,
 					deployVersion,
@@ -138,6 +139,7 @@ func ApplyWithOptions(configPath string, opts Options) error {
 					deployVersion[:min(7, len(deployVersion))],
 				)
 			} else {
+				// Normaler Update oder --force: Pin wird entfernt
 				plan.LockFile.UpdateArtifact(
 					d.Artifact.Artifact.Name,
 					deployVersion,

@@ -28,6 +28,7 @@ func PlanWithOptions(configPath string, opts Options) error {
 	planOpts := planner.PlanOptions{
 		Artifacts:      opts.Artifacts,
 		RollbackCommit: opts.RollbackCommit,
+		Force:          opts.Force,
 	}
 
 	plan, err := planner.CreatePlanWithOptions(rootPath, cfg, planOpts)
