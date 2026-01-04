@@ -57,6 +57,7 @@ nav:
       - Dependencies: concepts/dependencies.md
       - Lock File: concepts/lock-file.md
       - Rollback: concepts/rollback.md
+      - CI/CD Integration: concepts/ci-cd.md
 
 markdown_extensions:
   - admonition

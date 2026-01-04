@@ -6,4 +6,5 @@ type Options struct {
 	RollbackCommit string   // Commit für Rollback
 	DryRun         bool     // Nur anzeigen, nicht ausführen
 	Force          bool     // Ignoriert gepinnte Artefakte
+	Commit         bool     // Automatisch committen nach Apply
 }

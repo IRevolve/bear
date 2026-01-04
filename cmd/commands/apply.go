@@ -9,6 +9,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var commitLock bool
+
 var applyCmd = &cobra.Command{
 	Use:   "apply [artifacts...]",
 	Short: "Execute the plan (validate and deploy changed artifacts)",
@@ -27,7 +29,8 @@ Examples:
   bear apply                           # Apply all changed artifacts
   bear apply user-api                  # Apply specific artifact
   bear apply user-api --rollback=abc   # Rollback to commit (pins artifact)
-  bear apply user-api --force          # Force apply, remove pin`,
+  bear apply user-api --force          # Force apply, remove pin
+  bear apply --commit                  # Apply and commit lock file with [skip ci]`,
 	RunE: func(c *cobra.Command, args []string) error {
 		// Konvertiere zu absolutem Pfad
 		absDir, err := filepath.Abs(workDir)
@@ -45,6 +48,7 @@ Examples:
 			RollbackCommit: rollback,
 			DryRun:         dryRun,
 			Force:          force,
+			Commit:         commitLock,
 		}
 
 		return cmd.ApplyWithOptions(configPath, opts)
@@ -53,4 +57,5 @@ Examples:
 
 func init() {
 	rootCmd.AddCommand(applyCmd)
+	applyCmd.Flags().BoolVarP(&commitLock, "commit", "c", false, "Commit and push lock file with [skip ci]")
 }

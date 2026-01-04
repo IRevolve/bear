@@ -22,6 +22,7 @@ Validates and deploys artifacts that have changes. First runs all validation ste
 
 | Flag | Description |
 |------|-------------|
+| `-c, --commit` | Commit and push lock file with `[skip ci]` |
 | `--dry-run` | Show what would happen without executing |
 | `--rollback <commit>` | Rollback to a specific commit and pin |
 | `-f, --force` | Force operation, ignore pinned artifacts |
@@ -34,6 +35,9 @@ bear apply
 
 # Apply specific artifacts
 bear apply user-api order-api
+
+# Apply and auto-commit lock file (for CI/CD)
+bear apply --commit
 
 # Dry run (no execution)
 bear apply --dry-run

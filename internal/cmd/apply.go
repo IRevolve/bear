@@ -157,7 +157,17 @@ func ApplyWithOptions(configPath string, opts Options) error {
 			if err := plan.LockFile.Save(plan.LockPath); err != nil {
 				return fmt.Errorf("error saving lock file: %w", err)
 			}
-			fmt.Printf("📝 Lock file updated: %s\n\n", plan.LockPath)
+			fmt.Printf("📝 Lock file updated: %s\n", plan.LockPath)
+
+			// Automatisch committen mit [skip ci]
+			if opts.Commit {
+				if err := commitLockFile(rootPath, plan.LockPath, deploys); err != nil {
+					fmt.Printf("⚠️  Warning: Failed to commit lock file: %v\n", err)
+				} else {
+					fmt.Println("📤 Lock file committed with [skip ci]")
+				}
+			}
+			fmt.Println()
 		}
 
 		fmt.Println("✅ All deployments completed!")
@@ -206,4 +216,37 @@ func mergeParams(cfg *config.Config, targetName string, artifactParams map[strin
 	}
 
 	return params
+}
+
+// commitLockFile commits the lock file with [skip ci] to prevent CI loops
+func commitLockFile(rootPath, lockPath string, deploys []planner.PlannedAction) error {
+	// Build commit message
+	var names []string
+	for _, d := range deploys {
+		names = append(names, d.Artifact.Artifact.Name)
+	}
+	msg := fmt.Sprintf("chore(bear): update lock file [skip ci]\n\nDeployed: %s", strings.Join(names, ", "))
+
+	// Git add
+	addCmd := exec.Command("git", "add", lockPath)
+	addCmd.Dir = rootPath
+	if err := addCmd.Run(); err != nil {
+		return fmt.Errorf("git add failed: %w", err)
+	}
+
+	// Git commit
+	commitCmd := exec.Command("git", "commit", "-m", msg)
+	commitCmd.Dir = rootPath
+	if err := commitCmd.Run(); err != nil {
+		return fmt.Errorf("git commit failed: %w", err)
+	}
+
+	// Git push
+	pushCmd := exec.Command("git", "push")
+	pushCmd.Dir = rootPath
+	if err := pushCmd.Run(); err != nil {
+		return fmt.Errorf("git push failed: %w", err)
+	}
+
+	return nil
 }
