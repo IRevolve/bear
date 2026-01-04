@@ -1,6 +1,7 @@
 package planner
 
 import (
+	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -46,12 +47,12 @@ type PlanOptions struct {
 }
 
 // CreatePlan erstellt einen Ausführungsplan basierend auf Änderungen
-func CreatePlan(rootPath string, cfg *config.Config, baseBranch string) (*Plan, error) {
-	return CreatePlanWithOptions(rootPath, cfg, baseBranch, PlanOptions{})
+func CreatePlan(rootPath string, cfg *config.Config) (*Plan, error) {
+	return CreatePlanWithOptions(rootPath, cfg, PlanOptions{})
 }
 
 // CreatePlanWithOptions erstellt einen Plan mit erweiterten Optionen
-func CreatePlanWithOptions(rootPath string, cfg *config.Config, baseBranch string, opts PlanOptions) (*Plan, error) {
+func CreatePlanWithOptions(rootPath string, cfg *config.Config, opts PlanOptions) (*Plan, error) {
 	// Lade Lock-Datei
 	lockPath := filepath.Join(rootPath, "bear.lock.yml")
 	lockFile, err := config.LoadLock(lockPath)
@@ -78,20 +79,12 @@ func CreatePlanWithOptions(rootPath string, cfg *config.Config, baseBranch strin
 	// Hole aktuellen Commit
 	currentCommit := detector.GetCurrentCommit(rootPath)
 
-	// Hole geänderte Dateien
-	changedFiles, err := detector.GetChangedFiles(rootPath, baseBranch)
-	if err != nil {
-		// Wenn git nicht verfügbar, markiere alles als zu validieren
-		plan := createFullPlan(artifacts, cfg, "git not available - validating all")
-		plan.LockFile = lockFile
-		plan.LockPath = lockPath
-		return plan, nil
-	}
-
-	affectedDirs := detector.GetAffectedDirs(changedFiles)
+	// Hole uncommitted/untracked changes (für alle Artifacts gleich)
+	uncommittedFiles, _ := detector.GetUncommittedChanges(rootPath)
+	uncommittedDirs := detector.GetAffectedDirs(uncommittedFiles)
 
 	plan := &Plan{
-		TotalChanges: len(changedFiles),
+		TotalChanges: len(uncommittedFiles),
 		LockFile:     lockFile,
 		LockPath:     lockPath,
 	}
@@ -99,18 +92,33 @@ func CreatePlanWithOptions(rootPath string, cfg *config.Config, baseBranch strin
 	for _, artifact := range artifacts {
 		relPath, _ := filepath.Rel(rootPath, artifact.Path)
 
-		// Prüfe ob das Artefakt von Änderungen betroffen ist
-		affected, files := isArtifactAffected(relPath, changedFiles, affectedDirs)
+		// 1. Prüfe uncommitted changes
+		affected, files := isArtifactAffected(relPath, uncommittedFiles, uncommittedDirs)
 
-		// Prüfe auch ob seit dem letzten Deployment Änderungen waren
+		// 2. Prüfe Änderungen seit dem letzten Deployment
 		lastDeployed := lockFile.GetLastDeployedCommit(artifact.Artifact.Name)
-		if lastDeployed != "" && lastDeployed != currentCommit && !affected {
-			// Prüfe ob Änderungen zwischen lastDeployed und current commit
-			commitChanges, _ := detector.GetChangedFilesBetweenCommits(rootPath, lastDeployed, "HEAD")
-			commitAffected, commitFiles := isArtifactAffected(relPath, commitChanges, detector.GetAffectedDirs(commitChanges))
-			if commitAffected {
+		if lastDeployed != "" && lastDeployed != currentCommit {
+			// Hole Änderungen zwischen lastDeployed und aktuellem HEAD
+			commitChanges, err := detector.GetChangedFilesBetweenCommits(rootPath, lastDeployed, "HEAD")
+			if err != nil {
+				// Commit nicht gefunden (z.B. fiktiver Commit in Lock-Datei) - als geändert markieren
 				affected = true
-				files = commitFiles
+				files = append(files, relPath+" (deployed commit not found)")
+			} else {
+				commitAffected, commitFiles := isArtifactAffected(relPath, commitChanges, detector.GetAffectedDirs(commitChanges))
+				if commitAffected {
+					affected = true
+					files = append(files, commitFiles...)
+					plan.TotalChanges += len(commitChanges)
+				}
+			}
+		} else if lastDeployed == "" {
+			// Noch nie deployed - als geändert markieren wenn staged/committed
+			cmd := exec.Command("git", "ls-files", relPath)
+			cmd.Dir = rootPath
+			if output, err := cmd.Output(); err == nil && len(output) > 0 {
+				affected = true
+				files = []string{relPath + " (new artifact)"}
 			}
 		}
 

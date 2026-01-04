@@ -122,7 +122,6 @@ bear apply --dry-run
 | Flag | Description |
 |------|-------------|
 | `-a, --artifact <name>` | Target specific artifact(s) |
-| `--base <branch>` | Base branch for change detection (default: `main`) |
 | `--dry-run` | Show what would happen without executing |
 | `--rollback <commit>` | Rollback to a specific commit |
 
@@ -135,9 +134,9 @@ bear apply --dry-run
 └─────────────┘     └─────────────┘     └─────────────┘
       │                   │                   │
       ▼                   ▼                   ▼
- Git diff vs        Show affected       Phase 1: Validate
- base branch        artifacts with       (setup, lint,
-                    dependencies          test, build)
+ Compare to         Show affected       Phase 1: Validate
+ last deployed      artifacts with       (setup, lint,
+ commit (lock)      dependencies          test, build)
                                                │
                                                ▼
                                          Phase 2: Deploy
@@ -149,11 +148,13 @@ bear apply --dry-run
 
 ### Change Detection
 
-Bear compares the current branch against the base branch (default: `main`) to detect file changes. It then:
+Bear compares each artifact against its **last deployed commit** (from `bear.lock.yml`). For each artifact it checks:
 
-1. Maps changed files to artifacts
-2. Resolves transitive dependencies
-3. Creates an execution plan
+1. **Uncommitted changes** — Staged, unstaged, or untracked files
+2. **Commits since last deploy** — Changes between the deployed commit and HEAD
+3. **New artifacts** — Files tracked in git but never deployed
+
+This means Bear doesn't need a base branch — it tracks state per artifact.
 
 ### Dependency Resolution
 

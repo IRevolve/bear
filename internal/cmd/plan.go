@@ -10,8 +10,8 @@ import (
 	"github.com/IRevolve/Bear/internal/planner"
 )
 
-func Plan(configPath string, baseBranch string) error {
-	return PlanWithOptions(configPath, Options{BaseBranch: baseBranch})
+func Plan(configPath string) error {
+	return PlanWithOptions(configPath, Options{})
 }
 
 func PlanWithOptions(configPath string, opts Options) error {
@@ -30,7 +30,7 @@ func PlanWithOptions(configPath string, opts Options) error {
 		RollbackCommit: opts.RollbackCommit,
 	}
 
-	plan, err := planner.CreatePlanWithOptions(rootPath, cfg, opts.BaseBranch, planOpts)
+	plan, err := planner.CreatePlanWithOptions(rootPath, cfg, planOpts)
 	if err != nil {
 		return fmt.Errorf("error creating plan: %w", err)
 	}

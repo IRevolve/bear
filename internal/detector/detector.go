@@ -138,6 +138,67 @@ func GetCurrentCommit(rootPath string) string {
 	return strings.TrimSpace(string(output))
 }
 
+// GetUncommittedChanges gibt alle uncommitted und untracked Dateien zurück
+func GetUncommittedChanges(rootPath string) ([]ChangedFile, error) {
+	gitRoot := getGitRoot(rootPath)
+	var allFiles []ChangedFile
+
+	// 1. Staged changes
+	cmd := exec.Command("git", "diff", "--name-status", "--cached", "--ignore-space-change", "--ignore-blank-lines")
+	cmd.Dir = rootPath
+	output, _ := cmd.Output()
+	allFiles = append(allFiles, parseGitDiff(string(output))...)
+
+	// 2. Unstaged changes
+	cmd = exec.Command("git", "diff", "--name-status", "--ignore-space-change", "--ignore-blank-lines")
+	cmd.Dir = rootPath
+	output, _ = cmd.Output()
+	allFiles = append(allFiles, parseGitDiff(string(output))...)
+
+	// 3. Untracked files
+	cmd = exec.Command("git", "ls-files", "--others", "--exclude-standard")
+	cmd.Dir = rootPath
+	output, _ = cmd.Output()
+	for _, line := range strings.Split(strings.TrimSpace(string(output)), "\n") {
+		if line != "" {
+			allFiles = append(allFiles, ChangedFile{Status: "A", Path: line})
+		}
+	}
+
+	// Konvertiere Pfade von git-root-relativ zu workspace-relativ
+	workspacePrefix := ""
+	if gitRoot != "" && rootPath != gitRoot {
+		relPath, err := filepath.Rel(gitRoot, rootPath)
+		if err == nil && relPath != "." {
+			workspacePrefix = relPath + "/"
+		}
+	}
+
+	var filteredFiles []ChangedFile
+	for _, f := range allFiles {
+		if workspacePrefix == "" {
+			filteredFiles = append(filteredFiles, f)
+		} else if strings.HasPrefix(f.Path, workspacePrefix) {
+			filteredFiles = append(filteredFiles, ChangedFile{
+				Status: f.Status,
+				Path:   strings.TrimPrefix(f.Path, workspacePrefix),
+			})
+		}
+	}
+
+	// Dedupliziere
+	seen := make(map[string]bool)
+	var uniqueFiles []ChangedFile
+	for _, f := range filteredFiles {
+		if !seen[f.Path] {
+			seen[f.Path] = true
+			uniqueFiles = append(uniqueFiles, f)
+		}
+	}
+
+	return uniqueFiles, nil
+}
+
 func parseGitDiff(output string) []ChangedFile {
 	var files []ChangedFile
 	lines := strings.Split(strings.TrimSpace(output), "\n")
