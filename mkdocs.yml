@@ -35,26 +35,28 @@ theme:
 nav:
   - Home: index.md
   - Getting Started:
-    - Installation: getting-started/installation.md
-    - Quick Start: getting-started/quickstart.md
+      - Installation: getting-started/installation.md
+      - Quick Start: getting-started/quickstart.md
   - Configuration:
-    - Project Config: configuration/project.md
-    - Artifacts: configuration/artifacts.md
-    - Presets: configuration/presets.md
+      - Project Config: configuration/project.md
+      - Artifacts: configuration/artifacts.md
+      - Languages: configuration/languages.md
+      - Targets: configuration/targets.md
+      - Presets: configuration/presets.md
   - Commands:
-    - Overview: commands/index.md
-    - init: commands/init.md
-    - plan: commands/plan.md
-    - apply: commands/apply.md
-    - list: commands/list.md
-    - check: commands/check.md
-    - tree: commands/tree.md
-    - preset: commands/preset.md
+      - Overview: commands/index.md
+      - init: commands/init.md
+      - plan: commands/plan.md
+      - apply: commands/apply.md
+      - list: commands/list.md
+      - check: commands/check.md
+      - tree: commands/tree.md
+      - preset: commands/preset.md
   - Concepts:
-    - Change Detection: concepts/change-detection.md
-    - Dependencies: concepts/dependencies.md
-    - Lock File: concepts/lock-file.md
-    - Rollback: concepts/rollback.md
+      - Change Detection: concepts/change-detection.md
+      - Dependencies: concepts/dependencies.md
+      - Lock File: concepts/lock-file.md
+      - Rollback: concepts/rollback.md
 
 markdown_extensions:
   - admonition
