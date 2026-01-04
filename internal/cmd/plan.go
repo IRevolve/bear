@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/IRevolve/Bear/internal/config"
+	"github.com/IRevolve/Bear/internal/loader"
 	"github.com/IRevolve/Bear/internal/planner"
 )
 
@@ -15,7 +15,7 @@ func Plan(configPath string) error {
 }
 
 func PlanWithOptions(configPath string, opts Options) error {
-	cfg, err := config.Load(configPath)
+	cfg, err := loader.Load(configPath)
 	if err != nil {
 		return fmt.Errorf("error loading config: %w", err)
 	}
