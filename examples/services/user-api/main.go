@@ -1,23 +1,24 @@
 package main
 
 import (
-	"log"
-	"net/http"
-
-	"github.com/acme/platform/libs/go-common"
+"encoding/json"
+"log"
+"net/http"
 )
 
 func main() {
 	http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
-		common.JSON(w, http.StatusOK, map[string]string{"status": "healthy"})
+w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]string{"status": "healthy"})
 	})
 
 	http.HandleFunc("/users", func(w http.ResponseWriter, r *http.Request) {
-		users := []map[string]string{
-			{"id": "1", "name": "Alice"},
-			{"id": "2", "name": "Bob"},
-		}
-		common.JSON(w, http.StatusOK, users)
+users := []map[string]string{
+{"id": "1", "name": "Alice"},
+{"id": "2", "name": "Bob"},
+}
+w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(users)
 	})
 
 	log.Println("Starting user-api on :8080")
