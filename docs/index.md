@@ -4,18 +4,16 @@
 
 A Terraform-inspired CI/CD tool for monorepos. Bear detects changes, resolves dependencies, and orchestrates builds and deployments with a simple plan/apply workflow.
 
-<div class="grid cards" markdown>
+## Features
 
-- :mag: **Git-based change detection** — Only build what changed
-- :link: **Dependency tracking** — Automatically rebuild dependents
-- :clipboard: **Plan/Apply workflow** — Review changes before deploying
-- :lock: **Lock file** — Track deployed versions per artifact
-- :books: **Library support** — Validate-only artifacts
-- :arrows_counterclockwise: **Rollback** — Redeploy any previous version
-- :globe_with_meridians: **Multi-language** — Go, Node, Python, Rust, Java, TypeScript
-- :dart: **Many targets** — Docker, CloudRun, Kubernetes, Lambda, S3, Helm
-
-</div>
+- 🔍 **Git-based change detection** — Only build what changed
+- 🔗 **Dependency tracking** — Automatically rebuild dependents
+- 📋 **Plan/Apply workflow** — Review changes before deploying
+- 🔒 **Lock file** — Track deployed versions per artifact
+- 📚 **Library support** — Validate-only artifacts
+- 🔄 **Rollback** — Redeploy any previous version
+- 🌍 **Multi-language** — Go, Node, Python, Rust, Java, TypeScript
+- 🎯 **Many targets** — Docker, CloudRun, Kubernetes, Lambda, S3, Helm
 
 ## Quick Example
 
@@ -59,22 +57,7 @@ bear apply
 
 ## Getting Started
 
-<div class="grid cards" markdown>
-
-- [:material-download: **Installation**](getting-started/installation.md)
-
-    Install Bear via `go install` or build from source
-
-- [:material-rocket-launch: **Quick Start**](getting-started/quickstart.md)
-
-    Get up and running in 5 minutes
-
-- [:material-cog: **Configuration**](configuration/project.md)
-
-    Learn about `bear.config.yml` and artifacts
-
-- [:material-package: **Presets**](configuration/presets.md)
-
-    Use community presets for languages and targets
-
-</div>
+- 📥 [**Installation**](getting-started/installation.md) — Install Bear via `go install` or build from source
+- 🚀 [**Quick Start**](getting-started/quickstart.md) — Get up and running in 5 minutes
+- ⚙️ [**Configuration**](configuration/project.md) — Learn about `bear.config.yml` and artifacts
+- 📦 [**Presets**](configuration/presets.md) — Use community presets for languages and targets
