@@ -1,13 +1,10 @@
-package githubwebhook
 package main
 
 import (
-	"context"
-	"encoding/json"
-	"log"
-
-	"github.com/aws/aws-lambda-go/events"
-	"github.com/aws/aws-lambda-go/lambda"
+"encoding/json"
+"fmt"
+"log"
+"net/http"
 )
 
 type GitHubEvent struct {
@@ -15,23 +12,23 @@ type GitHubEvent struct {
 	Repository struct {
 		FullName string `json:"full_name"`
 	} `json:"repository"`
+}
 
+func handler(w http.ResponseWriter, r *http.Request) {
+	var event GitHubEvent
+	if err := json.NewDecoder(r.Body).Decode(&event); err != nil {
+		http.Error(w, "Invalid request", http.StatusBadRequest)
+		return
+	}
 
+	log.Printf("Received %s event for %s", event.Action, event.Repository.FullName)
 
+	w.Header().Set("Content-Type", "application/json")
+	fmt.Fprint(w, `{"status": "ok"}`)
+}
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-}	lambda.Start(handler)func main() {}	}, nil		Body:       `{"status": "ok"}`,		StatusCode: 200,	return events.APIGatewayProxyResponse{	log.Printf("Received %s event for %s", event.Action, event.Repository.FullName)	}		return events.APIGatewayProxyResponse{StatusCode: 400}, err	if err := json.Unmarshal([]byte(request.Body), &event); err != nil {	var event GitHubEventfunc handler(ctx context.Context, request events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {}
+func main() {
+	http.HandleFunc("/webhook", handler)
+	log.Println("Starting github-webhook on :8080")
+	log.Fatal(http.ListenAndServe(":8080", nil))
+}
