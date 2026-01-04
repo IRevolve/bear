@@ -44,7 +44,6 @@ deployed commit hash.`,
 			Artifacts:      artifacts,
 			RollbackCommit: rollback,
 			DryRun:         dryRun,
-			BaseBranch:     baseBranch,
 		}
 
 		return cmd.ApplyWithOptions(configPath, opts)

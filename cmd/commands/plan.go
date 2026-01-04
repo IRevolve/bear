@@ -15,8 +15,8 @@ var planCmd = &cobra.Command{
 	Long: `Creates an execution plan showing which artifacts have changed
 and what actions would be taken (validate, deploy, skip).
 
-The plan compares against the base branch (default: main) and the
-lock file to determine what needs to be built and deployed.`,
+The plan compares each artifact against its last deployed commit
+(from bear.lock.yml) to determine what needs to be built and deployed.`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: func(c *cobra.Command, args []string) error {
 		workDir := "."
@@ -39,7 +39,6 @@ lock file to determine what needs to be built and deployed.`,
 			Artifacts:      artifacts,
 			RollbackCommit: rollback,
 			DryRun:         dryRun,
-			BaseBranch:     baseBranch,
 		}
 
 		return cmd.PlanWithOptions(configPath, opts)
