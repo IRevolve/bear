@@ -8,11 +8,12 @@ import (
 	"strings"
 
 	"github.com/IRevolve/Bear/internal/config"
+	"github.com/IRevolve/Bear/internal/loader"
 	"github.com/IRevolve/Bear/internal/scanner"
 )
 
 func Tree(configPath string, filterArtifacts []string) error {
-	cfg, err := config.Load(configPath)
+	cfg, err := loader.Load(configPath)
 	if err != nil {
 		return fmt.Errorf("error loading config: %w", err)
 	}

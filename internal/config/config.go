@@ -53,9 +53,16 @@ type TargetTemplate struct {
 	Deploy   []Step            `yaml:"deploy,omitempty"`   // Deployment-Schritte (mit $PARAM Platzhaltern)
 }
 
+// UseConfig definiert welche Presets importiert werden sollen
+type UseConfig struct {
+	Languages []string `yaml:"languages,omitempty"` // z.B. ["go", "node", "python"]
+	Targets   []string `yaml:"targets,omitempty"`   // z.B. ["docker", "cloudrun", "lambda"]
+}
+
 // Config ist die Hauptkonfiguration (build.bear)
 type Config struct {
 	Name      string           `yaml:"name"`
+	Use       UseConfig        `yaml:"use,omitempty"`     // Importiert vordefinierte Presets
 	Languages []Language       `yaml:"languages"`
 	Targets   []TargetTemplate `yaml:"targets,omitempty"`
 }

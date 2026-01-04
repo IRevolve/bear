@@ -1,0 +1,146 @@
+package commands
+
+import (
+	"fmt"
+	"os"
+	"path/filepath"
+	"sort"
+	"strings"
+
+	"github.com/IRevolve/Bear/internal/presets"
+	"github.com/spf13/cobra"
+)
+
+var (
+	initLanguages []string
+	initTargets   []string
+	initForce     bool
+)
+
+var initCmd = &cobra.Command{
+	Use:   "init",
+	Short: "Initialize a new Bear project",
+	Long: `Creates a new bear.config.yml in the current directory.
+
+Uses the folder name as project name and imports the specified
+language and target presets.
+
+Available language presets:
+  go, node, typescript, python, rust, java
+
+Available target presets:
+  docker, cloudrun, cloudrun-job, lambda, s3, s3-static,
+  kubernetes, helm, fly, vercel, netlify
+
+Examples:
+  bear init                           # Interactive
+  bear init --lang go,node            # Go + Node presets
+  bear init --lang go --target docker # Go + Docker
+  bear init -d ./new-project          # Different directory`,
+	RunE: func(c *cobra.Command, args []string) error {
+		// Konvertiere zu absolutem Pfad
+		absDir, err := filepath.Abs(workDir)
+		if err != nil {
+			return fmt.Errorf("invalid path: %w", err)
+		}
+
+		configPath := filepath.Join(absDir, "bear.config.yml")
+
+		// Prüfe ob bereits existiert
+		if _, err := os.Stat(configPath); err == nil && !initForce {
+			return fmt.Errorf("config file already exists: %s (use --force to overwrite)", configPath)
+		}
+
+		// Verwende Ordnername als Projektname
+		projectName := filepath.Base(absDir)
+
+		// Validiere Languages
+		for _, lang := range initLanguages {
+			if _, ok := presets.GetLanguage(lang); !ok {
+				available := presets.ListLanguages()
+				sort.Strings(available)
+				return fmt.Errorf("unknown language: %s\nAvailable: %s", lang, strings.Join(available, ", "))
+			}
+		}
+
+		// Validiere Targets
+		for _, target := range initTargets {
+			if _, ok := presets.GetTarget(target); !ok {
+				available := presets.ListTargets()
+				sort.Strings(available)
+				return fmt.Errorf("unknown target: %s\nAvailable: %s", target, strings.Join(available, ", "))
+			}
+		}
+
+		// Generiere Config
+		config := generateConfig(projectName, initLanguages, initTargets)
+
+		// Schreibe Datei
+		if err := os.WriteFile(configPath, []byte(config), 0644); err != nil {
+			return fmt.Errorf("failed to write config: %w", err)
+		}
+
+		fmt.Printf("🐻 Created %s\n\n", configPath)
+		fmt.Println("Next steps:")
+		fmt.Println("  1. Add bear.artifact.yml to your services/apps")
+		fmt.Println("  2. Add bear.lib.yml to your libraries")
+		fmt.Println("  3. Run 'bear check' to validate your setup")
+		fmt.Println("  4. Run 'bear plan' to see what would be built")
+
+		return nil
+	},
+}
+
+func generateConfig(name string, languages, targets []string) string {
+	var sb strings.Builder
+
+	sb.WriteString(fmt.Sprintf("name: %s\n", name))
+
+	// Use-Sektion wenn Presets gewählt
+	if len(languages) > 0 || len(targets) > 0 {
+		sb.WriteString("\nuse:\n")
+		if len(languages) > 0 {
+			sb.WriteString("  languages:\n")
+			for _, lang := range languages {
+				sb.WriteString(fmt.Sprintf("    - %s\n", lang))
+			}
+		}
+		if len(targets) > 0 {
+			sb.WriteString("  targets:\n")
+			for _, target := range targets {
+				sb.WriteString(fmt.Sprintf("    - %s\n", target))
+			}
+		}
+	}
+
+	// Beispiel-Kommentare für Custom-Erweiterungen
+	sb.WriteString(`
+# Custom languages (optional, extend or override presets)
+# languages:
+#   - name: custom-lang
+#     detection:
+#       files: [custom.config]
+#     validation:
+#       build:
+#         - name: Build
+#           run: custom-build
+
+# Custom targets (optional, extend or override presets)
+# targets:
+#   - name: custom-target
+#     defaults:
+#       PARAM: value
+#     deploy:
+#       - name: Deploy
+#         run: custom-deploy $PARAM
+`)
+
+	return sb.String()
+}
+
+func init() {
+	initCmd.Flags().StringSliceVar(&initLanguages, "lang", nil, "Language presets to use (go,node,python,rust,java,typescript)")
+	initCmd.Flags().StringSliceVar(&initTargets, "target", nil, "Target presets to use (docker,cloudrun,lambda,s3,kubernetes,...)")
+	initCmd.Flags().BoolVar(&initForce, "force", false, "Overwrite existing config")
+	rootCmd.AddCommand(initCmd)
+}

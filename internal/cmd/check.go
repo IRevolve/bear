@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/IRevolve/Bear/internal/config"
+	"github.com/IRevolve/Bear/internal/loader"
 	"github.com/IRevolve/Bear/internal/scanner"
 )
 
@@ -38,7 +38,7 @@ func Check(configPath string) error {
 
 	// 1. Lade Config
 	fmt.Print("📄 Loading config... ")
-	cfg, err := config.Load(configPath)
+	cfg, err := loader.Load(configPath)
 	if err != nil {
 		fmt.Println("❌")
 		result.AddError("Failed to load config: %v", err)

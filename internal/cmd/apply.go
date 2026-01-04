@@ -9,6 +9,7 @@ import (
 
 	"github.com/IRevolve/Bear/internal/config"
 	"github.com/IRevolve/Bear/internal/detector"
+	"github.com/IRevolve/Bear/internal/loader"
 	"github.com/IRevolve/Bear/internal/planner"
 )
 
@@ -17,7 +18,7 @@ func Apply(configPath string, dryRun bool) error {
 }
 
 func ApplyWithOptions(configPath string, opts Options) error {
-	cfg, err := config.Load(configPath)
+	cfg, err := loader.Load(configPath)
 	if err != nil {
 		return fmt.Errorf("error loading config: %w", err)
 	}
