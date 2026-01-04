@@ -60,6 +60,15 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
+      - name: Check if pre-release
+        id: prerelease
+        run: |
+          if [[ "${{ github.ref_name }}" =~ a$ ]]; then
+            echo "is_prerelease=true" >> $GITHUB_OUTPUT
+          else
+            echo "is_prerelease=false" >> $GITHUB_OUTPUT
+          fi
+
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
@@ -71,6 +80,7 @@ jobs:
         with:
           files: artifacts/*
           generate_release_notes: true
+          prerelease: ${{ steps.prerelease.outputs.is_prerelease }}
 
   docker:
     runs-on: ubuntu-latest
