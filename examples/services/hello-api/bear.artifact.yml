@@ -1,4 +1,0 @@
-name: hello-api
-target: local-binary
-params:
-  OUTPUT_DIR: ./deployed
