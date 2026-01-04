@@ -89,10 +89,13 @@ jobs:
         include:
           - dockerfile: Dockerfile
             suffix: ""
+            latest: true
           - dockerfile: Dockerfile.alpine
             suffix: "-alpine"
+            latest: false
           - dockerfile: Dockerfile.debian
             suffix: "-debian"
+            latest: false
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -120,7 +123,7 @@ jobs:
           tags: |
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
-            type=raw,value=latest,enable=${{ matrix.suffix == '' }}
+            type=raw,value=latest,enable=${{ matrix.latest }}
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v6
