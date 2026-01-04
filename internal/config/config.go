@@ -104,6 +104,7 @@ type LockEntry struct {
 	Timestamp string `yaml:"timestamp"`         // Zeitpunkt des Deployments
 	Version   string `yaml:"version,omitempty"` // Optionale Version
 	Target    string `yaml:"target"`            // Verwendetes Target-Template
+	Pinned    bool   `yaml:"pinned,omitempty"`  // Wenn true, wird dieses Artifact nicht automatisch aktualisiert
 }
 
 // LockFile enthält den Deployment-Status aller Artefakte
@@ -152,6 +153,14 @@ func (l *LockFile) GetLastDeployedCommit(artifactName string) string {
 	return ""
 }
 
+// IsPinned prüft ob ein Artifact gepinnt ist
+func (l *LockFile) IsPinned(artifactName string) bool {
+	if entry, ok := l.Artifacts[artifactName]; ok {
+		return entry.Pinned
+	}
+	return false
+}
+
 // UpdateArtifact aktualisiert den Deployment-Status eines Artefakts
 func (l *LockFile) UpdateArtifact(artifactName, commit, target, version string) {
 	l.Artifacts[artifactName] = LockEntry{
@@ -159,5 +168,27 @@ func (l *LockFile) UpdateArtifact(artifactName, commit, target, version string) 
 		Timestamp: time.Now().UTC().Format(time.RFC3339),
 		Version:   version,
 		Target:    target,
+		Pinned:    false,
 	}
+}
+
+// UpdateArtifactPinned aktualisiert den Deployment-Status und pinnt das Artifact
+func (l *LockFile) UpdateArtifactPinned(artifactName, commit, target, version string) {
+	l.Artifacts[artifactName] = LockEntry{
+		Commit:    commit,
+		Timestamp: time.Now().UTC().Format(time.RFC3339),
+		Version:   version,
+		Target:    target,
+		Pinned:    true,
+	}
+}
+
+// UnpinArtifact entfernt das Pinning von einem Artifact
+func (l *LockFile) UnpinArtifact(artifactName string) bool {
+	if entry, ok := l.Artifacts[artifactName]; ok {
+		entry.Pinned = false
+		l.Artifacts[artifactName] = entry
+		return true
+	}
+	return false
 }

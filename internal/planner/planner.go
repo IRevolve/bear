@@ -92,6 +92,17 @@ func CreatePlanWithOptions(rootPath string, cfg *config.Config, opts PlanOptions
 	for _, artifact := range artifacts {
 		relPath, _ := filepath.Rel(rootPath, artifact.Path)
 
+		// Prüfe ob Artifact gepinnt ist (z.B. nach Rollback)
+		if lockFile.IsPinned(artifact.Artifact.Name) {
+			plan.Actions = append(plan.Actions, PlannedAction{
+				Artifact: artifact,
+				Action:   ActionSkip,
+				Reason:   "pinned (use --unpin to unlock)",
+			})
+			plan.ToSkip++
+			continue
+		}
+
 		// 1. Prüfe uncommitted changes
 		affected, files := isArtifactAffected(relPath, uncommittedFiles, uncommittedDirs)
 
