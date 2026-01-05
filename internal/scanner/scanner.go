@@ -30,19 +30,32 @@ func ScanArtifacts(rootPath string, cfg *config.Config) ([]DiscoveredArtifact, e
 		isLib := d.Name() == "bear.lib.yml"
 		isArtifact := d.Name() == "bear.artifact.yml"
 
-		if isArtifact || isLib {
+		if isArtifact {
 			artifact, err := config.LoadArtifact(path)
 			if err != nil {
 				return err
 			}
 
-			artifact.IsLib = isLib
 			dir := filepath.Dir(path)
 			lang := detectLanguage(dir, cfg.Languages)
 
 			artifacts = append(artifacts, DiscoveredArtifact{
 				Path:     dir,
 				Artifact: artifact,
+				Language: lang,
+			})
+		} else if isLib {
+			lib, err := config.LoadLibrary(path)
+			if err != nil {
+				return err
+			}
+
+			dir := filepath.Dir(path)
+			lang := detectLanguage(dir, cfg.Languages)
+
+			artifacts = append(artifacts, DiscoveredArtifact{
+				Path:     dir,
+				Artifact: lib.ToArtifact(),
 				Language: lang,
 			})
 		}
