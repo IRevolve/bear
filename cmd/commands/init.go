@@ -54,28 +54,36 @@ Examples:
 		// Verwende Ordnername als Projektname
 		projectName := filepath.Base(absDir)
 
+		manager := presets.NewManager()
+
 		// Validate languages
 		for _, lang := range initLanguages {
-			if _, ok := presets.GetLanguage(lang); !ok {
-				available := presets.ListLanguages()
-				sort.Strings(available)
-				return fmt.Errorf("unknown language: %s\nAvailable: %s", lang, strings.Join(available, ", "))
+			if _, err := manager.GetLanguage(lang); err != nil {
+				index, _ := manager.GetIndex()
+				if index != nil {
+					sort.Strings(index.Languages)
+					return fmt.Errorf("unknown language: %s\nAvailable: %s", lang, strings.Join(index.Languages, ", "))
+				}
+				return fmt.Errorf("unknown language: %s (run 'bear preset update' to refresh cache)", lang)
 			}
 		}
 
 		// Validate targets
 		for _, target := range initTargets {
-			if _, ok := presets.GetTarget(target); !ok {
-				available := presets.ListTargets()
-				sort.Strings(available)
-				return fmt.Errorf("unknown target: %s\nAvailable: %s", target, strings.Join(available, ", "))
+			if _, err := manager.GetTarget(target); err != nil {
+				index, _ := manager.GetIndex()
+				if index != nil {
+					sort.Strings(index.Targets)
+					return fmt.Errorf("unknown target: %s\nAvailable: %s", target, strings.Join(index.Targets, ", "))
+				}
+				return fmt.Errorf("unknown target: %s (run 'bear preset update' to refresh cache)", target)
 			}
 		}
 
-		// Generiere Config
+		// Generate config
 		config := generateConfig(projectName, initLanguages, initTargets)
 
-		// Schreibe Datei
+		// Write file
 		if err := os.WriteFile(configPath, []byte(config), 0644); err != nil {
 			return fmt.Errorf("failed to write config: %w", err)
 		}
