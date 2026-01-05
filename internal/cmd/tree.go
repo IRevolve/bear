@@ -158,79 +158,6 @@ func getStatus(a scanner.DiscoveredArtifact, lockFile *config.LockFile) string {
 	return ""
 }
 
-// findRoots finds all artifacts that are base libraries (no own deps, but others depend on them)
-func findRoots(artifacts []scanner.DiscoveredArtifact, dependents map[string][]string) []scanner.DiscoveredArtifact {
-	var roots []scanner.DiscoveredArtifact
-
-	for _, a := range artifacts {
-		// Libraries without own dependencies that are used by others
-		if len(a.Artifact.DependsOn) == 0 && len(dependents[a.Artifact.Name]) > 0 {
-			roots = append(roots, a)
-		}
-	}
-
-	// Sortiere alphabetisch
-	sort.Slice(roots, func(i, j int) bool {
-		return roots[i].Artifact.Name < roots[j].Artifact.Name
-	})
-
-	return roots
-}
-
-// printFullTree prints the complete tree with dependents (unused, kept for reference)
-func printFullTree(a scanner.DiscoveredArtifact, artifactMap map[string]scanner.DiscoveredArtifact, dependents map[string][]string, lockFile *config.LockFile, prefix string, isLast bool, printed map[string]bool) {
-	if printed[a.Artifact.Name] {
-		return
-	}
-	printed[a.Artifact.Name] = true
-
-	// Print current node
-	connector := "├── "
-	if isLast {
-		connector = "└── "
-	}
-	if prefix == "" {
-		connector = ""
-	}
-
-	icon := "📦"
-	if a.Artifact.IsLib {
-		icon = "📚"
-	}
-
-	status := ""
-	if lockFile != nil {
-		if lockFile.IsPinned(a.Artifact.Name) {
-			status = " 📌"
-		} else if entry, ok := lockFile.Artifacts[a.Artifact.Name]; ok {
-			status = fmt.Sprintf(" [%s]", entry.Version)
-		}
-	}
-
-	fmt.Printf("%s%s%s %s%s\n", prefix, connector, icon, a.Artifact.Name, status)
-
-	// Berechne neuen Prefix
-	newPrefix := prefix
-	if prefix != "" {
-		if isLast {
-			newPrefix += "    "
-		} else {
-			newPrefix += "│   "
-		}
-	}
-
-	// Print dependents (who depends on me?)
-	deps := dependents[a.Artifact.Name]
-	sort.Strings(deps)
-
-	for i, depName := range deps {
-		if dep, ok := artifactMap[depName]; ok {
-			isLastDep := i == len(deps)-1
-			printFullTree(dep, artifactMap, dependents, lockFile, newPrefix, isLastDep, printed)
-		}
-	}
-}
-
 // printArtifactTree prints the tree for a specific artifact (dependencies)
 func printArtifactTree(a scanner.DiscoveredArtifact, artifactMap map[string]scanner.DiscoveredArtifact, dependents map[string][]string, lockFile *config.LockFile, prefix string, isRoot bool) {
 	icon := "📦"
@@ -285,27 +212,4 @@ func printArtifactTree(a scanner.DiscoveredArtifact, artifactMap map[string]scan
 			fmt.Printf("   ⬆️  Used by: %s\n", strings.Join(deps, ", "))
 		}
 	}
-}
-
-func printArtifactInfo(a scanner.DiscoveredArtifact, lockFile *config.LockFile, prefix string) {
-	icon := "📦"
-	if a.Artifact.IsLib {
-		icon = "📚"
-	}
-
-	status := ""
-	if lockFile != nil {
-		if lockFile.IsPinned(a.Artifact.Name) {
-			status = " 📌"
-		} else if entry, ok := lockFile.Artifacts[a.Artifact.Name]; ok {
-			status = fmt.Sprintf(" [%s]", entry.Version)
-		}
-	}
-
-	target := ""
-	if !a.Artifact.IsLib && a.Artifact.Target != "" {
-		target = fmt.Sprintf(" → %s", a.Artifact.Target)
-	}
-
-	fmt.Printf("%s%s %s%s%s\n", prefix, icon, a.Artifact.Name, target, status)
 }

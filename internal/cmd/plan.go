@@ -10,10 +10,6 @@ import (
 	"github.com/IRevolve/Bear/internal/planner"
 )
 
-func Plan(configPath string) error {
-	return PlanWithOptions(configPath, Options{})
-}
-
 func PlanWithOptions(configPath string, opts Options) error {
 	cfg, err := loader.Load(configPath)
 	if err != nil {

@@ -12,82 +12,6 @@ type ChangedFile struct {
 	Status string // A=Added, M=Modified, D=Deleted, R=Renamed
 }
 
-// GetChangedFiles returns all changed files (git diff)
-func GetChangedFiles(rootPath string, baseBranch string) ([]ChangedFile, error) {
-	if baseBranch == "" {
-		baseBranch = "main"
-	}
-
-	// Get Git root directory
-	gitRoot := getGitRoot(rootPath)
-
-	var allFiles []ChangedFile
-
-	// 1. Get changes between base branch and HEAD (ignore whitespace)
-	cmd := exec.Command("git", "diff", "--name-status", "--ignore-space-change", "--ignore-blank-lines", baseBranch+"...HEAD")
-	cmd.Dir = rootPath
-	output, _ := cmd.Output()
-	allFiles = append(allFiles, parseGitDiff(string(output))...)
-
-	// 2. Hole uncommitted staged changes (ignoriere Whitespace)
-	cmd = exec.Command("git", "diff", "--name-status", "--cached", "--ignore-space-change", "--ignore-blank-lines")
-	cmd.Dir = rootPath
-	output, _ = cmd.Output()
-	allFiles = append(allFiles, parseGitDiff(string(output))...)
-
-	// 3. Hole uncommitted unstaged changes (ignoriere Whitespace)
-	cmd = exec.Command("git", "diff", "--name-status", "--ignore-space-change", "--ignore-blank-lines")
-	cmd.Dir = rootPath
-	output, _ = cmd.Output()
-	allFiles = append(allFiles, parseGitDiff(string(output))...)
-
-	// 4. Hole untracked files
-	cmd = exec.Command("git", "ls-files", "--others", "--exclude-standard")
-	cmd.Dir = rootPath
-	output, _ = cmd.Output()
-	for _, line := range strings.Split(strings.TrimSpace(string(output)), "\n") {
-		if line != "" {
-			allFiles = append(allFiles, ChangedFile{Status: "A", Path: line})
-		}
-	}
-
-	// Konvertiere Pfade von git-root-relativ zu workspace-relativ
-	workspacePrefix := ""
-	if gitRoot != "" && rootPath != gitRoot {
-		// Berechne den relativen Pfad vom Git-Root zum Workspace
-		relPath, err := filepath.Rel(gitRoot, rootPath)
-		if err == nil && relPath != "." {
-			workspacePrefix = relPath + "/"
-		}
-	}
-
-	// Filtere Dateien die im Workspace sind und konvertiere Pfade
-	var filteredFiles []ChangedFile
-	for _, f := range allFiles {
-		if workspacePrefix == "" {
-			filteredFiles = append(filteredFiles, f)
-		} else if strings.HasPrefix(f.Path, workspacePrefix) {
-			// Entferne Workspace-Prefix für lokale Pfade
-			filteredFiles = append(filteredFiles, ChangedFile{
-				Status: f.Status,
-				Path:   strings.TrimPrefix(f.Path, workspacePrefix),
-			})
-		}
-	}
-
-	// Dedupliziere
-	seen := make(map[string]bool)
-	var uniqueFiles []ChangedFile
-	for _, f := range filteredFiles {
-		if !seen[f.Path] {
-			seen[f.Path] = true
-			uniqueFiles = append(uniqueFiles, f)
-		}
-	}
-
-	return uniqueFiles, nil
-}
-
 // getGitRoot returns the root directory of the Git repository
 func getGitRoot(path string) string {
 	cmd := exec.Command("git", "rev-parse", "--show-toplevel")
@@ -99,20 +23,7 @@ func getGitRoot(path string) string {
 	return strings.TrimSpace(string(output))
 }
 
-// GetChangedFilesFromCommit gibt geänderte Dateien seit einem Commit zurück
-func GetChangedFilesFromCommit(rootPath string, commitHash string) ([]ChangedFile, error) {
-	cmd := exec.Command("git", "diff", "--name-status", commitHash+"...HEAD")
-	cmd.Dir = rootPath
-
-	output, err := cmd.Output()
-	if err != nil {
-		return nil, err
-	}
-
-	return parseGitDiff(string(output)), nil
-}
-
-// GetChangedFilesBetweenCommits gibt geänderte Dateien zwischen zwei Commits zurück
+// GetChangedFilesBetweenCommits returns changed files between two commits
 func GetChangedFilesBetweenCommits(rootPath string, fromCommit, toCommit string) ([]ChangedFile, error) {
 	cmd := exec.Command("git", "diff", "--name-status", "--ignore-space-change", "--ignore-blank-lines", fromCommit+".."+toCommit)
 	cmd.Dir = rootPath

@@ -47,11 +47,6 @@ type PlanOptions struct {
 	Force          bool     // Ignore pinned artifacts
 }
 
-// CreatePlan creates an execution plan based on changes
-func CreatePlan(rootPath string, cfg *config.Config) (*Plan, error) {
-	return CreatePlanWithOptions(rootPath, cfg, PlanOptions{})
-}
-
 // CreatePlanWithOptions creates a plan with extended options
 func CreatePlanWithOptions(rootPath string, cfg *config.Config, opts PlanOptions) (*Plan, error) {
 	// Lade Lock-Datei
@@ -205,36 +200,6 @@ func isArtifactAffected(artifactPath string, changedFiles []detector.ChangedFile
 	}
 
 	return len(affected) > 0, affected
-}
-
-func createFullPlan(artifacts []scanner.DiscoveredArtifact, cfg *config.Config, reason string) *Plan {
-	plan := &Plan{}
-
-	for _, artifact := range artifacts {
-		plan.Actions = append(plan.Actions, PlannedAction{
-			Artifact: artifact,
-			Action:   ActionValidate,
-			Reason:   reason,
-		})
-		plan.ToValidate++
-	}
-
-	return plan
-}
-
-func createEmptyPlan(artifacts []scanner.DiscoveredArtifact) *Plan {
-	plan := &Plan{}
-
-	for _, artifact := range artifacts {
-		plan.Actions = append(plan.Actions, PlannedAction{
-			Artifact: artifact,
-			Action:   ActionSkip,
-			Reason:   "no changes detected",
-		})
-		plan.ToSkip++
-	}
-
-	return plan
 }
 
 func (p *Plan) addDependentArtifacts(artifacts []scanner.DiscoveredArtifact, cfg *config.Config) {
