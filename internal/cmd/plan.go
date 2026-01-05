@@ -64,7 +64,7 @@ func printPlan(plan *planner.Plan, rootPath string, opts Options) {
 		fmt.Printf("📊 %d file(s) changed\n\n", plan.TotalChanges)
 	}
 
-	// Gruppiere nach Action Type
+	// Group by action type
 	var validates, deploys, skips []planner.PlannedAction
 
 	for _, action := range plan.Actions {
@@ -114,7 +114,7 @@ func printPlan(plan *planner.Plan, rootPath string, opts Options) {
 			fmt.Printf("    Target: %s\n", d.Artifact.Artifact.Target)
 			fmt.Printf("    Reason: %s\n", d.Reason)
 
-			// Zeige letzten deployeten Commit aus Lock-Datei
+			// Show last deployed commit from lock file
 			if plan.LockFile != nil {
 				lastCommit := plan.LockFile.GetLastDeployedCommit(d.Artifact.Artifact.Name)
 				if lastCommit != "" {

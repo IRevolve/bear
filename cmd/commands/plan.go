@@ -36,7 +36,7 @@ Examples:
 		}
 
 		opts := cmd.Options{
-			Artifacts:      args, // Positional args sind die Artefakte
+			Artifacts:      args, // Positional args are the artifacts
 			RollbackCommit: rollback,
 			DryRun:         dryRun,
 			Force:          force,

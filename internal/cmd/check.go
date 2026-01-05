@@ -10,7 +10,7 @@ import (
 	"github.com/IRevolve/Bear/internal/scanner"
 )
 
-// ValidationResult enthält das Ergebnis einer Validierung
+// ValidationResult contains the result of a validation
 type ValidationResult struct {
 	Errors   []string
 	Warnings []string
@@ -109,16 +109,16 @@ func Check(configPath string) error {
 		artifactMap[a.Artifact.Name] = a
 	}
 
-	// 6. Prüfe jedes Artifact
+	// 6. Check each artifact
 	fmt.Print("🔗 Checking dependencies... ")
 	depErrors := 0
 	for _, a := range artifacts {
-		// Prüfe Language Detection
+		// Check language detection
 		if a.Language == "unknown" {
 			result.AddWarning("Artifact '%s' has unknown language", a.Artifact.Name)
 		}
 
-		// Prüfe Target (nur für non-libs)
+		// Check target (only for non-libs)
 		if !a.Artifact.IsLib {
 			if a.Artifact.Target == "" {
 				result.AddError("Artifact '%s' has no target defined", a.Artifact.Name)
@@ -128,7 +128,7 @@ func Check(configPath string) error {
 			}
 		}
 
-		// Prüfe Dependencies
+		// Check dependencies
 		for _, dep := range a.Artifact.DependsOn {
 			if _, ok := artifactMap[dep]; !ok {
 				result.AddError("Artifact '%s' depends on unknown artifact '%s'",
@@ -143,7 +143,7 @@ func Check(configPath string) error {
 		fmt.Printf("❌ %d unresolved\n", depErrors)
 	}
 
-	// 7. Prüfe auf Circular Dependencies
+	// 7. Check for circular dependencies
 	fmt.Print("🔄 Checking for cycles... ")
 	cycles := findCycles(artifacts)
 	if len(cycles) > 0 {
@@ -159,7 +159,7 @@ func Check(configPath string) error {
 	return printResult(result)
 }
 
-// findCycles findet zirkuläre Dependencies
+// findCycles finds circular dependencies
 func findCycles(artifacts []scanner.DiscoveredArtifact) [][]string {
 	var cycles [][]string
 
@@ -169,7 +169,7 @@ func findCycles(artifacts []scanner.DiscoveredArtifact) [][]string {
 		deps[a.Artifact.Name] = a.Artifact.DependsOn
 	}
 
-	// DFS für jeden Node
+	// DFS for each node
 	visited := make(map[string]bool)
 	recStack := make(map[string]bool)
 	var path []string
@@ -186,7 +186,7 @@ func findCycles(artifacts []scanner.DiscoveredArtifact) [][]string {
 					return true
 				}
 			} else if recStack[dep] {
-				// Zyklus gefunden - extrahiere den Zykluspfad
+				// Cycle found - extract the cycle path
 				cycleStart := -1
 				for i, n := range path {
 					if n == dep {

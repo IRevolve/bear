@@ -127,13 +127,13 @@ var Languages = map[string]config.Language{
 	},
 }
 
-// GetLanguage gibt eine vordefinierte Sprache zurück
+// GetLanguage returns a predefined language
 func GetLanguage(name string) (config.Language, bool) {
 	lang, ok := Languages[name]
 	return lang, ok
 }
 
-// ListLanguages gibt alle verfügbaren Sprachen zurück
+// ListLanguages returns all available languages
 func ListLanguages() []string {
 	var names []string
 	for name := range Languages {

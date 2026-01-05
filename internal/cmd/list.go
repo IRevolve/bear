@@ -16,7 +16,7 @@ func List(configPath string) error {
 		return fmt.Errorf("error loading config: %w", err)
 	}
 
-	// Suche im Verzeichnis der Config-Datei
+	// Search in the directory of the config file
 	rootPath := filepath.Dir(configPath)
 	if rootPath == "." {
 		rootPath, _ = os.Getwd()

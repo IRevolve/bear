@@ -31,10 +31,10 @@ var presetListCmd = &cobra.Command{
 		fmt.Println("📦 Available Presets")
 		fmt.Println("====================")
 
-		// Versuche vom Remote zu laden
+		// Try to load from remote
 		index, err := manager.GetIndex()
 		if err != nil {
-			// Fallback auf eingebettete Presets
+			// Fallback to embedded presets
 			fmt.Println()
 			fmt.Println("⚠️  Could not fetch remote presets, showing embedded presets")
 			fmt.Println()

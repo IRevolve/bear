@@ -28,7 +28,7 @@ func Tree(configPath string, filterArtifacts []string) error {
 		return fmt.Errorf("error scanning artifacts: %w", err)
 	}
 
-	// Lade Lock-Datei für Status-Info
+	// Load lock file for status info
 	lockPath := filepath.Join(rootPath, "bear.lock.yml")
 	lockFile, _ := config.LoadLock(lockPath)
 
@@ -51,9 +51,9 @@ func Tree(configPath string, filterArtifacts []string) error {
 	fmt.Println(strings.Repeat("─", 50))
 	fmt.Println()
 
-	// Filtere oder zeige alle
+	// Filter or show all
 	if len(filterArtifacts) > 0 {
-		// Zeige spezifische Artifacts
+		// Show specific artifacts
 		for i, name := range filterArtifacts {
 			if a, ok := artifactMap[name]; ok {
 				if i > 0 {
@@ -65,11 +65,11 @@ func Tree(configPath string, filterArtifacts []string) error {
 			}
 		}
 	} else {
-		// Vollständiger Baum: Zeige von Libraries nach Services
+		// Full tree: Show from libraries to services
 		printFullDependencyTree(artifacts, artifactMap, dependents, lockFile)
 	}
 
-	// Statistiken
+	// Statistics
 	libs := 0
 	for _, a := range artifacts {
 		if a.Artifact.IsLib {
@@ -83,7 +83,7 @@ func Tree(configPath string, filterArtifacts []string) error {
 	return nil
 }
 
-// printFullDependencyTree zeigt den kompletten Dependency-Baum
+// printFullDependencyTree displays the complete dependency tree
 func printFullDependencyTree(artifacts []scanner.DiscoveredArtifact, artifactMap map[string]scanner.DiscoveredArtifact, dependents map[string][]string, lockFile *config.LockFile) {
 	// Gruppiere: Libraries zuerst, dann Services
 	var libs, services []scanner.DiscoveredArtifact
@@ -158,12 +158,12 @@ func getStatus(a scanner.DiscoveredArtifact, lockFile *config.LockFile) string {
 	return ""
 }
 
-// findRoots findet alle Artifacts die Basis-Libraries sind (keine eigenen Deps, aber andere hängen von ihnen ab)
+// findRoots finds all artifacts that are base libraries (no own deps, but others depend on them)
 func findRoots(artifacts []scanner.DiscoveredArtifact, dependents map[string][]string) []scanner.DiscoveredArtifact {
 	var roots []scanner.DiscoveredArtifact
 
 	for _, a := range artifacts {
-		// Libraries ohne eigene Dependencies, die von anderen verwendet werden
+		// Libraries without own dependencies that are used by others
 		if len(a.Artifact.DependsOn) == 0 && len(dependents[a.Artifact.Name]) > 0 {
 			roots = append(roots, a)
 		}
@@ -177,7 +177,7 @@ func findRoots(artifacts []scanner.DiscoveredArtifact, dependents map[string][]s
 	return roots
 }
 
-// printFullTree druckt den kompletten Baum mit dependents (unused, kept for reference)
+// printFullTree prints the complete tree with dependents (unused, kept for reference)
 func printFullTree(a scanner.DiscoveredArtifact, artifactMap map[string]scanner.DiscoveredArtifact, dependents map[string][]string, lockFile *config.LockFile, prefix string, isLast bool, printed map[string]bool) {
 	if printed[a.Artifact.Name] {
 		return
@@ -219,7 +219,7 @@ func printFullTree(a scanner.DiscoveredArtifact, artifactMap map[string]scanner.
 		}
 	}
 
-	// Print dependents (wer hängt von mir ab?)
+	// Print dependents (who depends on me?)
 	deps := dependents[a.Artifact.Name]
 	sort.Strings(deps)
 
@@ -231,7 +231,7 @@ func printFullTree(a scanner.DiscoveredArtifact, artifactMap map[string]scanner.
 	}
 }
 
-// printArtifactTree druckt den Baum für ein spezifisches Artifact (dependencies)
+// printArtifactTree prints the tree for a specific artifact (dependencies)
 func printArtifactTree(a scanner.DiscoveredArtifact, artifactMap map[string]scanner.DiscoveredArtifact, dependents map[string][]string, lockFile *config.LockFile, prefix string, isRoot bool) {
 	icon := "📦"
 	if a.Artifact.IsLib {

@@ -6,24 +6,24 @@ import (
 	"strings"
 )
 
-// ChangedFile repräsentiert eine geänderte Datei
+// ChangedFile represents a changed file
 type ChangedFile struct {
 	Path   string
 	Status string // A=Added, M=Modified, D=Deleted, R=Renamed
 }
 
-// GetChangedFiles gibt alle geänderten Dateien zurück (git diff)
+// GetChangedFiles returns all changed files (git diff)
 func GetChangedFiles(rootPath string, baseBranch string) ([]ChangedFile, error) {
 	if baseBranch == "" {
 		baseBranch = "main"
 	}
 
-	// Hole Git-Root-Verzeichnis
+	// Get Git root directory
 	gitRoot := getGitRoot(rootPath)
 
 	var allFiles []ChangedFile
 
-	// 1. Hole Änderungen zwischen base branch und HEAD (ignoriere Whitespace)
+	// 1. Get changes between base branch and HEAD (ignore whitespace)
 	cmd := exec.Command("git", "diff", "--name-status", "--ignore-space-change", "--ignore-blank-lines", baseBranch+"...HEAD")
 	cmd.Dir = rootPath
 	output, _ := cmd.Output()
@@ -88,7 +88,7 @@ func GetChangedFiles(rootPath string, baseBranch string) ([]ChangedFile, error) 
 	return uniqueFiles, nil
 }
 
-// getGitRoot gibt das Wurzelverzeichnis des Git-Repositories zurück
+// getGitRoot returns the root directory of the Git repository
 func getGitRoot(path string) string {
 	cmd := exec.Command("git", "rev-parse", "--show-toplevel")
 	cmd.Dir = path

@@ -1,10 +1,10 @@
 package cmd
 
-// Options enthält alle Optionen für plan und apply
+// Options contains all options for plan and apply
 type Options struct {
-	Artifacts      []string // Spezifische Artefakte die ausgewählt werden
-	RollbackCommit string   // Commit für Rollback
-	DryRun         bool     // Nur anzeigen, nicht ausführen
-	Force          bool     // Ignoriert gepinnte Artefakte
-	Commit         bool     // Automatisch committen nach Apply
+	Artifacts      []string // Specific artifacts to select
+	RollbackCommit string   // Commit for rollback
+	DryRun         bool     // Only display, don't execute
+	Force          bool     // Ignore pinned artifacts
+	Commit         bool     // Automatically commit after apply
 }

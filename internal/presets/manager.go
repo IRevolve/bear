@@ -13,30 +13,30 @@ import (
 )
 
 const (
-	// DefaultPresetsRepo ist das Standard-Repository für Presets
+	// DefaultPresetsRepo is the default repository for presets
 	DefaultPresetsRepo = "https://raw.githubusercontent.com/IRevolve/bear-presets/main"
 
-	// CacheDir ist der lokale Cache-Ordner
+	// CacheDir is the local cache directory
 	CacheDir = ".bear/presets"
 
-	// CacheTTL ist die Gültigkeitsdauer des Caches
+	// CacheTTL is the cache validity duration
 	CacheTTL = 24 * time.Hour
 )
 
-// PresetIndex enthält die Liste aller verfügbaren Presets
+// PresetIndex contains the list of all available presets
 type PresetIndex struct {
 	Version   int      `yaml:"version"`
 	Languages []string `yaml:"languages"`
 	Targets   []string `yaml:"targets"`
 }
 
-// Manager verwaltet das Laden und Cachen von Presets
+// Manager manages loading and caching of presets
 type Manager struct {
 	repoURL  string
 	cacheDir string
 }
 
-// NewManager erstellt einen neuen Preset-Manager
+// NewManager creates a new preset manager
 func NewManager() *Manager {
 	homeDir, _ := os.UserHomeDir()
 	return &Manager{
@@ -75,7 +75,7 @@ func (m *Manager) GetTarget(name string) (config.TargetTemplate, error) {
 	return target, nil
 }
 
-// GetIndex lädt den Preset-Index
+// GetIndex loads the preset index
 func (m *Manager) GetIndex() (*PresetIndex, error) {
 	data, err := m.fetchFile("index.yml")
 	if err != nil {
@@ -90,7 +90,7 @@ func (m *Manager) GetIndex() (*PresetIndex, error) {
 	return &index, nil
 }
 
-// ListLanguages gibt alle verfügbaren Sprachen zurück
+// ListLanguages returns all available languages
 func (m *Manager) ListLanguages() ([]string, error) {
 	index, err := m.GetIndex()
 	if err != nil {
@@ -99,7 +99,7 @@ func (m *Manager) ListLanguages() ([]string, error) {
 	return index.Languages, nil
 }
 
-// ListTargets gibt alle verfügbaren Targets zurück
+// ListTargets returns all available targets
 func (m *Manager) ListTargets() ([]string, error) {
 	index, err := m.GetIndex()
 	if err != nil {
@@ -108,7 +108,7 @@ func (m *Manager) ListTargets() ([]string, error) {
 	return index.Targets, nil
 }
 
-// Update aktualisiert den lokalen Cache
+// Update updates the local cache
 func (m *Manager) Update() error {
 	// Lösche Cache
 	if err := os.RemoveAll(m.cacheDir); err != nil {
@@ -138,13 +138,13 @@ func (m *Manager) Update() error {
 	return nil
 }
 
-// fetchPreset lädt ein Preset (mit Cache)
+// fetchPreset loads a preset (with caching)
 func (m *Manager) fetchPreset(category, name string) ([]byte, error) {
 	filename := fmt.Sprintf("%s/%s.yml", category, name)
 	return m.fetchFile(filename)
 }
 
-// fetchFile lädt eine Datei (mit Cache)
+// fetchFile loads a file (with caching)
 func (m *Manager) fetchFile(filename string) ([]byte, error) {
 	cachePath := filepath.Join(m.cacheDir, filename)
 
@@ -160,16 +160,16 @@ func (m *Manager) fetchFile(filename string) ([]byte, error) {
 		return nil, err
 	}
 
-	// Speichere im Cache
+	// Save to cache
 	if err := m.writeCache(cachePath, data); err != nil {
-		// Cache-Fehler sind nicht kritisch
+		// Cache errors are not critical
 		fmt.Fprintf(os.Stderr, "Warning: failed to cache %s: %v\n", filename, err)
 	}
 
 	return data, nil
 }
 
-// readCache liest aus dem Cache (falls gültig)
+// readCache reads from cache (if valid)
 func (m *Manager) readCache(path string) ([]byte, error) {
 	info, err := os.Stat(path)
 	if err != nil {
@@ -184,7 +184,7 @@ func (m *Manager) readCache(path string) ([]byte, error) {
 	return os.ReadFile(path)
 }
 
-// writeCache schreibt in den Cache
+// writeCache writes to the cache
 func (m *Manager) writeCache(path string, data []byte) error {
 	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0755); err != nil {
@@ -193,7 +193,7 @@ func (m *Manager) writeCache(path string, data []byte) error {
 	return os.WriteFile(path, data, 0644)
 }
 
-// download lädt eine URL herunter
+// download downloads a URL
 func (m *Manager) download(url string) ([]byte, error) {
 	client := &http.Client{Timeout: 10 * time.Second}
 
