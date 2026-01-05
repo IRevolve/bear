@@ -31,42 +31,23 @@ var presetListCmd = &cobra.Command{
 		fmt.Println("📦 Available Presets")
 		fmt.Println("====================")
 
-		// Try to load from remote
 		index, err := manager.GetIndex()
 		if err != nil {
-			// Fallback to embedded presets
-			fmt.Println()
-			fmt.Println("⚠️  Could not fetch remote presets, showing embedded presets")
-			fmt.Println()
+			return fmt.Errorf("could not fetch presets: %w\n\nRun 'bear preset update' to refresh cache", err)
+		}
 
-			langs := presets.ListLanguages()
-			sort.Strings(langs)
-			fmt.Println("Languages:")
-			for _, l := range langs {
-				fmt.Printf("  • %s\n", l)
-			}
+		fmt.Println()
+		fmt.Println("Languages:")
+		sort.Strings(index.Languages)
+		for _, l := range index.Languages {
+			fmt.Printf("  • %s\n", l)
+		}
 
-			fmt.Println()
-			targets := presets.ListTargets()
-			sort.Strings(targets)
-			fmt.Println("Targets:")
-			for _, t := range targets {
-				fmt.Printf("  • %s\n", t)
-			}
-		} else {
-			fmt.Println()
-			fmt.Println("Languages:")
-			sort.Strings(index.Languages)
-			for _, l := range index.Languages {
-				fmt.Printf("  • %s\n", l)
-			}
-
-			fmt.Println()
-			fmt.Println("Targets:")
-			sort.Strings(index.Targets)
-			for _, t := range index.Targets {
-				fmt.Printf("  • %s\n", t)
-			}
+		fmt.Println()
+		fmt.Println("Targets:")
+		sort.Strings(index.Targets)
+		for _, t := range index.Targets {
+			fmt.Printf("  • %s\n", t)
 		}
 
 		fmt.Println()
@@ -116,12 +97,7 @@ Examples:
 		case "language", "lang", "l":
 			lang, err := manager.GetLanguage(name)
 			if err != nil {
-				// Fallback
-				var ok bool
-				lang, ok = presets.GetLanguage(name)
-				if !ok {
-					return fmt.Errorf("unknown language: %s", name)
-				}
+				return fmt.Errorf("unknown language: %s (run 'bear preset update' to refresh cache)", name)
 			}
 
 			fmt.Printf("📝 Language: %s\n", lang.Name)
@@ -164,12 +140,7 @@ Examples:
 		case "target", "t":
 			target, err := manager.GetTarget(name)
 			if err != nil {
-				// Fallback
-				var ok bool
-				target, ok = presets.GetTarget(name)
-				if !ok {
-					return fmt.Errorf("unknown target: %s", name)
-				}
+				return fmt.Errorf("unknown target: %s (run 'bear preset update' to refresh cache)", name)
 			}
 
 			fmt.Printf("🎯 Target: %s\n", target.Name)
