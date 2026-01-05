@@ -27,7 +27,7 @@ func Load(path string) (*config.Config, error) {
 	return cfg, nil
 }
 
-// resolveLanguages fügt vordefinierte Languages hinzu
+// resolveLanguages adds language presets from remote
 func resolveLanguages(cfg *config.Config) error {
 	if len(cfg.Use.Languages) == 0 {
 		return nil
@@ -44,15 +44,9 @@ func resolveLanguages(cfg *config.Config) error {
 	// Add presets first (can be overridden)
 	var presetLangs []config.Language
 	for _, name := range cfg.Use.Languages {
-		// Try to load from remote first
 		preset, err := manager.GetLanguage(name)
 		if err != nil {
-			// Fallback to embedded presets
-			var ok bool
-			preset, ok = presets.GetLanguage(name)
-			if !ok {
-				return fmt.Errorf("unknown language preset: %s", name)
-			}
+			return fmt.Errorf("unknown language preset: %s (run 'bear preset update' to refresh cache)", name)
 		}
 		// Only add if not already defined
 		if !existing[name] {
@@ -66,7 +60,7 @@ func resolveLanguages(cfg *config.Config) error {
 	return nil
 }
 
-// resolveTargets fügt vordefinierte Targets hinzu
+// resolveTargets adds target presets from remote
 func resolveTargets(cfg *config.Config) error {
 	if len(cfg.Use.Targets) == 0 {
 		return nil
@@ -83,15 +77,9 @@ func resolveTargets(cfg *config.Config) error {
 	// Add presets first
 	var presetTargets []config.TargetTemplate
 	for _, name := range cfg.Use.Targets {
-		// Try to load from remote first
 		preset, err := manager.GetTarget(name)
 		if err != nil {
-			// Fallback to embedded presets
-			var ok bool
-			preset, ok = presets.GetTarget(name)
-			if !ok {
-				return fmt.Errorf("unknown target preset: %s", name)
-			}
+			return fmt.Errorf("unknown target preset: %s (run 'bear preset update' to refresh cache)", name)
 		}
 		if !existing[name] {
 			presetTargets = append(presetTargets, preset)
