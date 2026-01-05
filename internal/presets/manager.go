@@ -90,24 +90,6 @@ func (m *Manager) GetIndex() (*PresetIndex, error) {
 	return &index, nil
 }
 
-// ListLanguages returns all available languages
-func (m *Manager) ListLanguages() ([]string, error) {
-	index, err := m.GetIndex()
-	if err != nil {
-		return nil, err
-	}
-	return index.Languages, nil
-}
-
-// ListTargets returns all available targets
-func (m *Manager) ListTargets() ([]string, error) {
-	index, err := m.GetIndex()
-	if err != nil {
-		return nil, err
-	}
-	return index.Targets, nil
-}
-
 // Update updates the local cache
 func (m *Manager) Update() error {
 	// Lösche Cache

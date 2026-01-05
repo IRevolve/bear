@@ -13,10 +13,6 @@ import (
 	"github.com/IRevolve/Bear/internal/planner"
 )
 
-func Apply(configPath string, dryRun bool) error {
-	return ApplyWithOptions(configPath, Options{DryRun: dryRun})
-}
-
 func ApplyWithOptions(configPath string, opts Options) error {
 	cfg, err := loader.Load(configPath)
 	if err != nil {
