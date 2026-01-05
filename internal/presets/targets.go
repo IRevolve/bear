@@ -94,13 +94,13 @@ var Targets = map[string]config.TargetTemplate{
 	},
 }
 
-// GetTarget gibt ein vordefiniertes Target zurück
+// GetTarget returns a predefined target
 func GetTarget(name string) (config.TargetTemplate, bool) {
 	target, ok := Targets[name]
 	return target, ok
 }
 
-// ListTargets gibt alle verfügbaren Targets zurück
+// ListTargets returns all available targets
 func ListTargets() []string {
 	var names []string
 	for name := range Targets {

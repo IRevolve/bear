@@ -7,19 +7,19 @@ import (
 	"github.com/IRevolve/Bear/internal/presets"
 )
 
-// Load lädt eine Config und löst alle Presets auf
+// Load loads a config and resolves all presets
 func Load(path string) (*config.Config, error) {
 	cfg, err := config.Load(path)
 	if err != nil {
 		return nil, err
 	}
 
-	// Löse Language-Presets auf
+	// Resolve language presets
 	if err := resolveLanguages(cfg); err != nil {
 		return nil, err
 	}
 
-	// Löse Target-Presets auf
+	// Resolve target presets
 	if err := resolveTargets(cfg); err != nil {
 		return nil, err
 	}
@@ -35,32 +35,32 @@ func resolveLanguages(cfg *config.Config) error {
 
 	manager := presets.NewManager()
 
-	// Erstelle Map der bereits definierten Languages
+	// Create map of already defined languages
 	existing := make(map[string]bool)
 	for _, lang := range cfg.Languages {
 		existing[lang.Name] = true
 	}
 
-	// Füge Presets am Anfang hinzu (können überschrieben werden)
+	// Add presets first (can be overridden)
 	var presetLangs []config.Language
 	for _, name := range cfg.Use.Languages {
-		// Versuche zuerst vom Remote zu laden
+		// Try to load from remote first
 		preset, err := manager.GetLanguage(name)
 		if err != nil {
-			// Fallback auf eingebettete Presets
+			// Fallback to embedded presets
 			var ok bool
 			preset, ok = presets.GetLanguage(name)
 			if !ok {
 				return fmt.Errorf("unknown language preset: %s", name)
 			}
 		}
-		// Nur hinzufügen wenn nicht bereits definiert
+		// Only add if not already defined
 		if !existing[name] {
 			presetLangs = append(presetLangs, preset)
 		}
 	}
 
-	// Presets zuerst, dann custom (custom überschreibt)
+	// Presets first, then custom (custom overrides)
 	cfg.Languages = append(presetLangs, cfg.Languages...)
 
 	return nil
@@ -74,19 +74,19 @@ func resolveTargets(cfg *config.Config) error {
 
 	manager := presets.NewManager()
 
-	// Erstelle Map der bereits definierten Targets
+	// Create map of already defined targets
 	existing := make(map[string]bool)
 	for _, target := range cfg.Targets {
 		existing[target.Name] = true
 	}
 
-	// Füge Presets am Anfang hinzu
+	// Add presets first
 	var presetTargets []config.TargetTemplate
 	for _, name := range cfg.Use.Targets {
-		// Versuche zuerst vom Remote zu laden
+		// Try to load from remote first
 		preset, err := manager.GetTarget(name)
 		if err != nil {
-			// Fallback auf eingebettete Presets
+			// Fallback to embedded presets
 			var ok bool
 			preset, ok = presets.GetTarget(name)
 			if !ok {

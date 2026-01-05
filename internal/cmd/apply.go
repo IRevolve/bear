@@ -51,7 +51,7 @@ func ApplyWithOptions(configPath string, opts Options) error {
 	currentCommit := detector.GetCurrentCommit(rootPath)
 	deployVersion := currentCommit
 
-	// Bei Rollback verwenden wir den Rollback-Commit für die Version
+	// For rollback, use the rollback commit for the version
 	if opts.RollbackCommit != "" {
 		deployVersion = opts.RollbackCommit
 		fmt.Println()
@@ -115,7 +115,7 @@ func ApplyWithOptions(configPath string, opts Options) error {
 				continue
 			}
 
-			// Merge Target-Defaults mit Artifact-Params
+			// Merge target defaults with artifact params
 			params := mergeParams(cfg, d.Artifact.Artifact.Target, d.Artifact.Artifact.Params)
 			params["NAME"] = d.Artifact.Artifact.Name
 			params["VERSION"] = deployVersion[:min(7, len(deployVersion))]
@@ -130,8 +130,8 @@ func ApplyWithOptions(configPath string, opts Options) error {
 				fmt.Printf("     ✓ Done\n")
 			}
 
-			// Update Lock-Datei nach erfolgreichem Deployment
-			// Bei Rollback wird das Artifact gepinnt (außer mit --force)
+			// Update lock file after successful deployment
+			// For rollback, the artifact is pinned (unless with --force)
 			if opts.RollbackCommit != "" && !opts.Force {
 				plan.LockFile.UpdateArtifactPinned(
 					d.Artifact.Artifact.Name,
@@ -140,7 +140,7 @@ func ApplyWithOptions(configPath string, opts Options) error {
 					deployVersion[:min(7, len(deployVersion))],
 				)
 			} else {
-				// Normaler Update oder --force: Pin wird entfernt
+				// Normal update or --force: pin is removed
 				plan.LockFile.UpdateArtifact(
 					d.Artifact.Artifact.Name,
 					deployVersion,
@@ -159,7 +159,7 @@ func ApplyWithOptions(configPath string, opts Options) error {
 			}
 			fmt.Printf("📝 Lock file updated: %s\n", plan.LockPath)
 
-			// Automatisch committen mit [skip ci]
+			// Automatically commit with [skip ci]
 			if opts.Commit {
 				if err := commitLockFile(rootPath, plan.LockPath, deploys); err != nil {
 					fmt.Printf("⚠️  Warning: Failed to commit lock file: %v\n", err)
@@ -181,14 +181,14 @@ func ApplyWithOptions(configPath string, opts Options) error {
 }
 
 func executeStep(step config.Step, workDir string, params map[string]string, cfg *config.Config) error {
-	// Ersetze Parameter in der Run-Anweisung
+	// Replace parameters in the run command
 	command := step.Run
 	for key, value := range params {
 		command = strings.ReplaceAll(command, "$"+key, value)
 		command = strings.ReplaceAll(command, "${"+key+"}", value)
 	}
 
-	// Führe den Befehl aus
+	// Execute the command
 	cmd := exec.Command("sh", "-c", command)
 	cmd.Dir = workDir
 	cmd.Stdout = os.Stdout
@@ -200,7 +200,7 @@ func executeStep(step config.Step, workDir string, params map[string]string, cfg
 func mergeParams(cfg *config.Config, targetName string, artifactParams map[string]string) map[string]string {
 	params := make(map[string]string)
 
-	// Finde Target-Template und übernehme Defaults
+	// Find target template and apply defaults
 	for _, t := range cfg.Targets {
 		if t.Name == targetName {
 			for k, v := range t.Defaults {
@@ -210,7 +210,7 @@ func mergeParams(cfg *config.Config, targetName string, artifactParams map[strin
 		}
 	}
 
-	// Überschreibe mit Artifact-Params
+	// Override with artifact params
 	for k, v := range artifactParams {
 		params[k] = v
 	}

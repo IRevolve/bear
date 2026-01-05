@@ -7,14 +7,14 @@ import (
 	"github.com/IRevolve/Bear/internal/config"
 )
 
-// DiscoveredArtifact enthält ein Artefakt mit seinem Pfad und erkannter Sprache
+// DiscoveredArtifact contains an artifact with its path and detected language
 type DiscoveredArtifact struct {
 	Path     string
 	Artifact *config.Artifact
 	Language string
 }
 
-// ScanArtifacts durchsucht ein Verzeichnis rekursiv nach bear.artifact.yml und bear.lib.yml Dateien
+// ScanArtifacts recursively scans a directory for bear.artifact.yml and bear.lib.yml files
 func ScanArtifacts(rootPath string, cfg *config.Config) ([]DiscoveredArtifact, error) {
 	var artifacts []DiscoveredArtifact
 
@@ -57,10 +57,10 @@ func ScanArtifacts(rootPath string, cfg *config.Config) ([]DiscoveredArtifact, e
 	return artifacts, nil
 }
 
-// detectLanguage erkennt die Sprache eines Verzeichnisses anhand der Detection-Regeln
+// detectLanguage detects the language of a directory based on detection rules
 func detectLanguage(dir string, languages []config.Language) string {
 	for _, lang := range languages {
-		// Prüfe ob eine der Detection-Dateien existiert
+		// Check if one of the detection files exists
 		for _, file := range lang.Detection.Files {
 			if _, err := os.Stat(filepath.Join(dir, file)); err == nil {
 				return lang.Name

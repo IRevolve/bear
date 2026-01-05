@@ -10,23 +10,23 @@ import (
 	"github.com/IRevolve/Bear/internal/scanner"
 )
 
-// ActionType definiert die Art der Aktion
+// ActionType defines the type of action
 type ActionType string
 
 const (
 	ActionValidate ActionType = "validate" // Lint, Test, Build
 	ActionDeploy   ActionType = "deploy"   // Deployment
-	ActionSkip     ActionType = "skip"     // Keine Änderungen
+	ActionSkip     ActionType = "skip"     // No changes
 )
 
-// PlannedAction repräsentiert eine geplante Aktion
+// PlannedAction represents a planned action
 type PlannedAction struct {
 	Artifact       scanner.DiscoveredArtifact
 	Action         ActionType
 	Reason         string
 	Steps          []config.Step
 	ChangedFiles   []string
-	RollbackCommit string // Wenn gesetzt, wird dieser Commit deployed (Rollback)
+	RollbackCommit string // If set, this commit will be deployed (rollback)
 }
 
 // Plan enthält alle geplanten Aktionen
@@ -40,19 +40,19 @@ type Plan struct {
 	LockPath     string
 }
 
-// PlanOptions enthält Optionen für die Plan-Erstellung
+// PlanOptions contains options for plan creation
 type PlanOptions struct {
-	Artifacts      []string // Nur diese Artefakte berücksichtigen
-	RollbackCommit string   // Rollback zu diesem Commit
-	Force          bool     // Ignoriert gepinnte Artefakte
+	Artifacts      []string // Only consider these artifacts
+	RollbackCommit string   // Rollback to this commit
+	Force          bool     // Ignore pinned artifacts
 }
 
-// CreatePlan erstellt einen Ausführungsplan basierend auf Änderungen
+// CreatePlan creates an execution plan based on changes
 func CreatePlan(rootPath string, cfg *config.Config) (*Plan, error) {
 	return CreatePlanWithOptions(rootPath, cfg, PlanOptions{})
 }
 
-// CreatePlanWithOptions erstellt einen Plan mit erweiterten Optionen
+// CreatePlanWithOptions creates a plan with extended options
 func CreatePlanWithOptions(rootPath string, cfg *config.Config, opts PlanOptions) (*Plan, error) {
 	// Lade Lock-Datei
 	lockPath := filepath.Join(rootPath, "bear.lock.yml")
@@ -67,20 +67,20 @@ func CreatePlanWithOptions(rootPath string, cfg *config.Config, opts PlanOptions
 		return nil, err
 	}
 
-	// Filtere Artefakte wenn Artifacts angegeben wurden
+	// Filter artifacts if Artifacts are specified
 	if len(opts.Artifacts) > 0 {
 		artifacts = filterArtifacts(artifacts, opts.Artifacts)
 	}
 
-	// Rollback-Modus: Alle targeted Artefakte deployen
+	// Rollback mode: Deploy all targeted artifacts
 	if opts.RollbackCommit != "" {
 		return createRollbackPlan(artifacts, cfg, lockFile, lockPath, opts.RollbackCommit), nil
 	}
 
-	// Hole aktuellen Commit
+	// Get current commit
 	currentCommit := detector.GetCurrentCommit(rootPath)
 
-	// Hole uncommitted/untracked changes (für alle Artifacts gleich)
+	// Get uncommitted/untracked changes (same for all artifacts)
 	uncommittedFiles, _ := detector.GetUncommittedChanges(rootPath)
 	uncommittedDirs := detector.GetAffectedDirs(uncommittedFiles)
 
@@ -93,8 +93,8 @@ func CreatePlanWithOptions(rootPath string, cfg *config.Config, opts PlanOptions
 	for _, artifact := range artifacts {
 		relPath, _ := filepath.Rel(rootPath, artifact.Path)
 
-		// Prüfe ob Artifact gepinnt ist (z.B. nach Rollback)
-		// --force ignoriert Pins
+		// Check if artifact is pinned (e.g. after rollback)
+		// --force ignores pins
 		if !opts.Force && lockFile.IsPinned(artifact.Artifact.Name) {
 			plan.Actions = append(plan.Actions, PlannedAction{
 				Artifact: artifact,

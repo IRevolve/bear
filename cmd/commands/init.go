@@ -38,7 +38,7 @@ Examples:
   bear init --lang go --target docker # Go + Docker
   bear init -d ./new-project          # Different directory`,
 	RunE: func(c *cobra.Command, args []string) error {
-		// Konvertiere zu absolutem Pfad
+		// Convert to absolute path
 		absDir, err := filepath.Abs(workDir)
 		if err != nil {
 			return fmt.Errorf("invalid path: %w", err)
@@ -46,7 +46,7 @@ Examples:
 
 		configPath := filepath.Join(absDir, "bear.config.yml")
 
-		// Prüfe ob bereits existiert
+		// Check if already exists
 		if _, err := os.Stat(configPath); err == nil && !initForce {
 			return fmt.Errorf("config file already exists: %s (use --force to overwrite)", configPath)
 		}
@@ -54,7 +54,7 @@ Examples:
 		// Verwende Ordnername als Projektname
 		projectName := filepath.Base(absDir)
 
-		// Validiere Languages
+		// Validate languages
 		for _, lang := range initLanguages {
 			if _, ok := presets.GetLanguage(lang); !ok {
 				available := presets.ListLanguages()
@@ -63,7 +63,7 @@ Examples:
 			}
 		}
 
-		// Validiere Targets
+		// Validate targets
 		for _, target := range initTargets {
 			if _, ok := presets.GetTarget(target); !ok {
 				available := presets.ListTargets()
@@ -96,7 +96,7 @@ func generateConfig(name string, languages, targets []string) string {
 
 	sb.WriteString(fmt.Sprintf("name: %s\n", name))
 
-	// Use-Sektion wenn Presets gewählt
+	// Use section if presets selected
 	if len(languages) > 0 || len(targets) > 0 {
 		sb.WriteString("\nuse:\n")
 		if len(languages) > 0 {
@@ -113,7 +113,7 @@ func generateConfig(name string, languages, targets []string) string {
 		}
 	}
 
-	// Beispiel-Kommentare für Custom-Erweiterungen
+	// Example comments for custom extensions
 	sb.WriteString(`
 # Custom languages (optional, extend or override presets)
 # languages:
