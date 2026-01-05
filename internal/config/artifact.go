@@ -6,16 +6,16 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// Artifact defines a single artifact (bear.artifact.yml or bear.lib.yml)
+// Artifact defines a single deployable artifact (bear.artifact.yml)
 type Artifact struct {
 	Name      string            `yaml:"name"`
-	Target    string            `yaml:"target,omitempty"`     // Reference to TargetTemplate (empty for libraries)
+	Target    string            `yaml:"target"`               // Reference to TargetTemplate
 	Params    map[string]string `yaml:"params,omitempty"`     // Parameters for the target
 	DependsOn []string          `yaml:"depends_on,omitempty"` // Dependencies to other artifacts
-	IsLib     bool              `yaml:"-"`                    // Set by scanner, not from YAML
+	IsLib     bool              `yaml:"-"`                    // Set by scanner for libraries
 }
 
-// LoadArtifact loads a bear.artifact.yml or bear.lib.yml file
+// LoadArtifact loads a bear.artifact.yml file
 func LoadArtifact(path string) (*Artifact, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
