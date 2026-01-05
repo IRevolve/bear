@@ -6,12 +6,11 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/IRevolve/Bear/internal/loader"
-	"github.com/IRevolve/Bear/internal/planner"
+	"github.com/IRevolve/Bear/internal"
 )
 
 func PlanWithOptions(configPath string, opts Options) error {
-	cfg, err := loader.Load(configPath)
+	cfg, err := internal.Load(configPath)
 	if err != nil {
 		return fmt.Errorf("error loading config: %w", err)
 	}
@@ -21,13 +20,13 @@ func PlanWithOptions(configPath string, opts Options) error {
 		rootPath, _ = os.Getwd()
 	}
 
-	planOpts := planner.PlanOptions{
+	planOpts := internal.PlanOptions{
 		Artifacts:      opts.Artifacts,
 		RollbackCommit: opts.RollbackCommit,
 		Force:          opts.Force,
 	}
 
-	plan, err := planner.CreatePlanWithOptions(rootPath, cfg, planOpts)
+	plan, err := internal.CreatePlanWithOptions(rootPath, cfg, planOpts)
 	if err != nil {
 		return fmt.Errorf("error creating plan: %w", err)
 	}
@@ -37,7 +36,7 @@ func PlanWithOptions(configPath string, opts Options) error {
 	return nil
 }
 
-func printPlan(plan *planner.Plan, rootPath string, opts Options) {
+func printPlan(plan *internal.Plan, rootPath string, opts Options) {
 	fmt.Println()
 	if opts.RollbackCommit != "" {
 		fmt.Println("Bear Rollback Plan")
@@ -61,20 +60,20 @@ func printPlan(plan *planner.Plan, rootPath string, opts Options) {
 	}
 
 	// Group by action type
-	var validates, deploys, skips []planner.PlannedAction
+	var validates, deploys, skips []internal.PlannedAction
 
 	for _, action := range plan.Actions {
 		switch action.Action {
-		case planner.ActionValidate:
+		case internal.ActionValidate:
 			validates = append(validates, action)
-		case planner.ActionDeploy:
+		case internal.ActionDeploy:
 			deploys = append(deploys, action)
-		case planner.ActionSkip:
+		case internal.ActionSkip:
 			skips = append(skips, action)
 		}
 	}
 
-	// Zeige Validations
+	// Show validations
 	if len(validates) > 0 {
 		fmt.Println("🔍 To Validate:")
 		fmt.Println()
@@ -99,7 +98,7 @@ func printPlan(plan *planner.Plan, rootPath string, opts Options) {
 		}
 	}
 
-	// Zeige Deployments
+	// Show deployments
 	if len(deploys) > 0 {
 		fmt.Println("🚀 To Deploy:")
 		fmt.Println()
@@ -130,7 +129,7 @@ func printPlan(plan *planner.Plan, rootPath string, opts Options) {
 		}
 	}
 
-	// Zeige Skips (kompakt)
+	// Show skips (compact)
 	if len(skips) > 0 {
 		fmt.Println("⏭️  Unchanged (will skip):")
 		fmt.Println()

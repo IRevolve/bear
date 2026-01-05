@@ -19,7 +19,7 @@ A Terraform-inspired CI/CD tool for monorepos. Bear detects changes, resolves de
 ## Installation
 
 ```bash
-go install github.com/IRevolve/Bear/cmd@latest
+go install github.com/IRevolve/Bear@latest
 ```
 
 Or build from source:
@@ -27,7 +27,7 @@ Or build from source:
 ```bash
 git clone https://github.com/IRevolve/Bear.git
 cd Bear
-go build -o bear ./cmd/main.go
+go build -o bear .
 ```
 
 ## Quick Start

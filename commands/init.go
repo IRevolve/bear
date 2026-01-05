@@ -7,7 +7,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/IRevolve/Bear/internal/presets"
+	"github.com/IRevolve/Bear/internal"
 	"github.com/spf13/cobra"
 )
 
@@ -54,7 +54,7 @@ Examples:
 		// Verwende Ordnername als Projektname
 		projectName := filepath.Base(absDir)
 
-		manager := presets.NewManager()
+		manager := internal.NewManager()
 
 		// Validate languages
 		for _, lang := range initLanguages {

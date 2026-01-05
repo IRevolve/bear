@@ -7,13 +7,12 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/IRevolve/Bear/internal"
 	"github.com/IRevolve/Bear/internal/config"
-	"github.com/IRevolve/Bear/internal/loader"
-	"github.com/IRevolve/Bear/internal/scanner"
 )
 
 func Tree(configPath string, filterArtifacts []string) error {
-	cfg, err := loader.Load(configPath)
+	cfg, err := internal.Load(configPath)
 	if err != nil {
 		return fmt.Errorf("error loading config: %w", err)
 	}
@@ -23,7 +22,7 @@ func Tree(configPath string, filterArtifacts []string) error {
 		rootPath, _ = os.Getwd()
 	}
 
-	artifacts, err := scanner.ScanArtifacts(rootPath, cfg)
+	artifacts, err := internal.ScanArtifacts(rootPath, cfg)
 	if err != nil {
 		return fmt.Errorf("error scanning artifacts: %w", err)
 	}
@@ -33,7 +32,7 @@ func Tree(configPath string, filterArtifacts []string) error {
 	lockFile, _ := config.LoadLock(lockPath)
 
 	// Build artifact map
-	artifactMap := make(map[string]scanner.DiscoveredArtifact)
+	artifactMap := make(map[string]internal.DiscoveredArtifact)
 	for _, a := range artifacts {
 		artifactMap[a.Artifact.Name] = a
 	}
@@ -84,9 +83,9 @@ func Tree(configPath string, filterArtifacts []string) error {
 }
 
 // printFullDependencyTree displays the complete dependency tree
-func printFullDependencyTree(artifacts []scanner.DiscoveredArtifact, artifactMap map[string]scanner.DiscoveredArtifact, dependents map[string][]string, lockFile *config.LockFile) {
-	// Gruppiere: Libraries zuerst, dann Services
-	var libs, services []scanner.DiscoveredArtifact
+func printFullDependencyTree(artifacts []internal.DiscoveredArtifact, artifactMap map[string]internal.DiscoveredArtifact, dependents map[string][]string, lockFile *config.LockFile) {
+	// Group: libraries first, then services
+	var libs, services []internal.DiscoveredArtifact
 	for _, a := range artifacts {
 		if a.Artifact.IsLib {
 			libs = append(libs, a)
@@ -145,7 +144,7 @@ func printFullDependencyTree(artifacts []scanner.DiscoveredArtifact, artifactMap
 	}
 }
 
-func getStatus(a scanner.DiscoveredArtifact, lockFile *config.LockFile) string {
+func getStatus(a internal.DiscoveredArtifact, lockFile *config.LockFile) string {
 	if lockFile == nil {
 		return ""
 	}
@@ -159,7 +158,7 @@ func getStatus(a scanner.DiscoveredArtifact, lockFile *config.LockFile) string {
 }
 
 // printArtifactTree prints the tree for a specific artifact (dependencies)
-func printArtifactTree(a scanner.DiscoveredArtifact, artifactMap map[string]scanner.DiscoveredArtifact, dependents map[string][]string, lockFile *config.LockFile, prefix string, isRoot bool) {
+func printArtifactTree(a internal.DiscoveredArtifact, artifactMap map[string]internal.DiscoveredArtifact, dependents map[string][]string, lockFile *config.LockFile, prefix string, isRoot bool) {
 	icon := "📦"
 	if a.Artifact.IsLib {
 		icon = "📚"

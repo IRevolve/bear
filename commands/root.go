@@ -5,7 +5,7 @@ import (
 )
 
 var (
-	// Globale Flags
+	// Global flags
 	workDir  string
 	rollback string
 	dryRun   bool
@@ -35,7 +35,7 @@ func Execute() error {
 }
 
 func init() {
-	// Globale Flags
+	// Global flags
 	rootCmd.PersistentFlags().StringVarP(&workDir, "dir", "d", ".", "Path to project directory")
 	rootCmd.PersistentFlags().StringVar(&rollback, "rollback", "", "Rollback artifact(s) to a specific commit")
 	rootCmd.PersistentFlags().BoolVar(&dryRun, "dry-run", false, "Show what would be executed without running commands")

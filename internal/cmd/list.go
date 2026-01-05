@@ -6,12 +6,11 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/IRevolve/Bear/internal/loader"
-	"github.com/IRevolve/Bear/internal/scanner"
+	"github.com/IRevolve/Bear/internal"
 )
 
 func List(configPath string) error {
-	cfg, err := loader.Load(configPath)
+	cfg, err := internal.Load(configPath)
 	if err != nil {
 		return fmt.Errorf("error loading config: %w", err)
 	}
@@ -22,7 +21,7 @@ func List(configPath string) error {
 		rootPath, _ = os.Getwd()
 	}
 
-	artifacts, err := scanner.ScanArtifacts(rootPath, cfg)
+	artifacts, err := internal.ScanArtifacts(rootPath, cfg)
 	if err != nil {
 		return fmt.Errorf("error scanning artifacts: %w", err)
 	}

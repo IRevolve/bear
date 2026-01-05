@@ -24,7 +24,7 @@ Examples:
   bear plan user-api order-api   # Plan multiple artifacts
   bear plan -d ./other-project   # Plan in different directory`,
 	RunE: func(c *cobra.Command, args []string) error {
-		// Konvertiere zu absolutem Pfad
+		// Convert to absolute path
 		absDir, err := filepath.Abs(workDir)
 		if err != nil {
 			return fmt.Errorf("invalid path: %w", err)

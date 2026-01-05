@@ -24,7 +24,7 @@ Examples:
   bear check                  # Check current directory
   bear check -d ./project     # Check different directory`,
 	RunE: func(c *cobra.Command, args []string) error {
-		// Konvertiere zu absolutem Pfad
+		// Convert to absolute path
 		absDir, err := filepath.Abs(workDir)
 		if err != nil {
 			return fmt.Errorf("invalid path: %w", err)

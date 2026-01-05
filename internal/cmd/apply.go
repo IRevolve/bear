@@ -7,14 +7,12 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/IRevolve/Bear/internal"
 	"github.com/IRevolve/Bear/internal/config"
-	"github.com/IRevolve/Bear/internal/detector"
-	"github.com/IRevolve/Bear/internal/loader"
-	"github.com/IRevolve/Bear/internal/planner"
 )
 
 func ApplyWithOptions(configPath string, opts Options) error {
-	cfg, err := loader.Load(configPath)
+	cfg, err := internal.Load(configPath)
 	if err != nil {
 		return fmt.Errorf("error loading config: %w", err)
 	}
@@ -24,13 +22,13 @@ func ApplyWithOptions(configPath string, opts Options) error {
 		rootPath, _ = os.Getwd()
 	}
 
-	planOpts := planner.PlanOptions{
+	planOpts := internal.PlanOptions{
 		Artifacts:      opts.Artifacts,
 		RollbackCommit: opts.RollbackCommit,
 		Force:          opts.Force,
 	}
 
-	plan, err := planner.CreatePlanWithOptions(rootPath, cfg, planOpts)
+	plan, err := internal.CreatePlanWithOptions(rootPath, cfg, planOpts)
 	if err != nil {
 		return fmt.Errorf("error creating plan: %w", err)
 	}
@@ -44,7 +42,7 @@ func ApplyWithOptions(configPath string, opts Options) error {
 		return nil
 	}
 
-	currentCommit := detector.GetCurrentCommit(rootPath)
+	currentCommit := internal.GetCurrentCommit(rootPath)
 	deployVersion := currentCommit
 
 	// For rollback, use the rollback commit for the version
@@ -61,12 +59,12 @@ func ApplyWithOptions(configPath string, opts Options) error {
 	fmt.Println()
 
 	// Gruppiere Aktionen
-	var validates, deploys []planner.PlannedAction
+	var validates, deploys []internal.PlannedAction
 	for _, action := range plan.Actions {
 		switch action.Action {
-		case planner.ActionValidate:
+		case internal.ActionValidate:
 			validates = append(validates, action)
-		case planner.ActionDeploy:
+		case internal.ActionDeploy:
 			deploys = append(deploys, action)
 		}
 	}
@@ -148,7 +146,7 @@ func ApplyWithOptions(configPath string, opts Options) error {
 			fmt.Println()
 		}
 
-		// Speichere Lock-Datei
+		// Save lock file
 		if !opts.DryRun {
 			if err := plan.LockFile.Save(plan.LockPath); err != nil {
 				return fmt.Errorf("error saving lock file: %w", err)
@@ -215,7 +213,7 @@ func mergeParams(cfg *config.Config, targetName string, artifactParams map[strin
 }
 
 // commitLockFile commits the lock file with [skip ci] to prevent CI loops
-func commitLockFile(rootPath, lockPath string, deploys []planner.PlannedAction) error {
+func commitLockFile(rootPath, lockPath string, deploys []internal.PlannedAction) error {
 	// Build commit message
 	var names []string
 	for _, d := range deploys {

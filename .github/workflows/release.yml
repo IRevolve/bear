@@ -48,7 +48,7 @@ jobs:
           if [ "$GOOS" = "windows" ]; then
             ext=".exe"
           fi
-          go build -o bear-${{ matrix.goos }}-${{ matrix.goarch }}${ext} ./cmd/main.go
+          go build -o bear-${{ matrix.goos }}-${{ matrix.goarch }}${ext} .
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4

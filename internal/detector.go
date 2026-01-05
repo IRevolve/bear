@@ -1,4 +1,4 @@
-package detector
+package internal
 
 import (
 	"os/exec"
@@ -36,7 +36,7 @@ func GetChangedFilesBetweenCommits(rootPath string, fromCommit, toCommit string)
 	return parseGitDiff(string(output)), nil
 }
 
-// GetCurrentCommit gibt den aktuellen HEAD Commit zurück
+// GetCurrentCommit returns the current HEAD commit
 func GetCurrentCommit(rootPath string) string {
 	cmd := exec.Command("git", "rev-parse", "HEAD")
 	cmd.Dir = rootPath
@@ -49,7 +49,7 @@ func GetCurrentCommit(rootPath string) string {
 	return strings.TrimSpace(string(output))
 }
 
-// GetUncommittedChanges gibt alle uncommitted und untracked Dateien zurück
+// GetUncommittedChanges returns all uncommitted and untracked files
 func GetUncommittedChanges(rootPath string) ([]ChangedFile, error) {
 	gitRoot := getGitRoot(rootPath)
 	var allFiles []ChangedFile
@@ -76,7 +76,7 @@ func GetUncommittedChanges(rootPath string) ([]ChangedFile, error) {
 		}
 	}
 
-	// Konvertiere Pfade von git-root-relativ zu workspace-relativ
+	// Convert paths from git-root-relative to workspace-relative
 	workspacePrefix := ""
 	if gitRoot != "" && rootPath != gitRoot {
 		relPath, err := filepath.Rel(gitRoot, rootPath)
@@ -97,7 +97,7 @@ func GetUncommittedChanges(rootPath string) ([]ChangedFile, error) {
 		}
 	}
 
-	// Dedupliziere
+	// Deduplicate
 	seen := make(map[string]bool)
 	var uniqueFiles []ChangedFile
 	for _, f := range filteredFiles {
@@ -131,13 +131,13 @@ func parseGitDiff(output string) []ChangedFile {
 	return files
 }
 
-// GetAffectedDirs gibt alle Verzeichnisse zurück, die von Änderungen betroffen sind
+// GetAffectedDirs returns all directories affected by changes
 func GetAffectedDirs(files []ChangedFile) map[string]bool {
 	dirs := make(map[string]bool)
 
 	for _, f := range files {
 		dir := filepath.Dir(f.Path)
-		// Füge alle Parent-Verzeichnisse hinzu
+		// Add all parent directories
 		for dir != "." && dir != "/" {
 			dirs[dir] = true
 			dir = filepath.Dir(dir)

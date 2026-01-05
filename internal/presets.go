@@ -1,4 +1,4 @@
-package presets
+package internal
 
 import (
 	"fmt"
@@ -45,7 +45,7 @@ func NewManager() *Manager {
 	}
 }
 
-// GetLanguage lädt ein Language-Preset
+// GetLanguage loads a language preset
 func (m *Manager) GetLanguage(name string) (config.Language, error) {
 	data, err := m.fetchPreset("languages", name)
 	if err != nil {
@@ -60,7 +60,7 @@ func (m *Manager) GetLanguage(name string) (config.Language, error) {
 	return lang, nil
 }
 
-// GetTarget lädt ein Target-Preset
+// GetTarget loads a target preset
 func (m *Manager) GetTarget(name string) (config.TargetTemplate, error) {
 	data, err := m.fetchPreset("targets", name)
 	if err != nil {
@@ -92,25 +92,25 @@ func (m *Manager) GetIndex() (*PresetIndex, error) {
 
 // Update updates the local cache
 func (m *Manager) Update() error {
-	// Lösche Cache
+	// Clear cache
 	if err := os.RemoveAll(m.cacheDir); err != nil {
 		return fmt.Errorf("failed to clear cache: %w", err)
 	}
 
-	// Lade Index um Cache zu füllen
+	// Load index to fill cache
 	index, err := m.GetIndex()
 	if err != nil {
 		return err
 	}
 
-	// Lade alle Languages
+	// Load all languages
 	for _, lang := range index.Languages {
 		if _, err := m.GetLanguage(lang); err != nil {
 			return fmt.Errorf("failed to fetch language %s: %w", lang, err)
 		}
 	}
 
-	// Lade alle Targets
+	// Load all targets
 	for _, target := range index.Targets {
 		if _, err := m.GetTarget(target); err != nil {
 			return fmt.Errorf("failed to fetch target %s: %w", target, err)
@@ -130,12 +130,12 @@ func (m *Manager) fetchPreset(category, name string) ([]byte, error) {
 func (m *Manager) fetchFile(filename string) ([]byte, error) {
 	cachePath := filepath.Join(m.cacheDir, filename)
 
-	// Prüfe Cache
+	// Check cache
 	if data, err := m.readCache(cachePath); err == nil {
 		return data, nil
 	}
 
-	// Lade von GitHub
+	// Load from GitHub
 	url := fmt.Sprintf("%s/%s", m.repoURL, filename)
 	data, err := m.download(url)
 	if err != nil {
@@ -158,7 +158,7 @@ func (m *Manager) readCache(path string) ([]byte, error) {
 		return nil, err
 	}
 
-	// Prüfe ob Cache noch gültig
+	// Check if cache is still valid
 	if time.Since(info.ModTime()) > CacheTTL {
 		return nil, fmt.Errorf("cache expired")
 	}

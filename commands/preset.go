@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/IRevolve/Bear/internal/presets"
+	"github.com/IRevolve/Bear/internal"
 	"github.com/spf13/cobra"
 )
 
@@ -25,7 +25,7 @@ var presetListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List all available presets",
 	RunE: func(c *cobra.Command, args []string) error {
-		manager := presets.NewManager()
+		manager := internal.NewManager()
 
 		fmt.Println()
 		fmt.Println("📦 Available Presets")
@@ -64,7 +64,7 @@ var presetUpdateCmd = &cobra.Command{
 	Use:   "update",
 	Short: "Update local preset cache",
 	RunE: func(c *cobra.Command, args []string) error {
-		manager := presets.NewManager()
+		manager := internal.NewManager()
 
 		fmt.Println("🔄 Updating presets from GitHub...")
 
@@ -89,7 +89,7 @@ Examples:
 	RunE: func(c *cobra.Command, args []string) error {
 		presetType := args[0]
 		name := args[1]
-		manager := presets.NewManager()
+		manager := internal.NewManager()
 
 		fmt.Println()
 

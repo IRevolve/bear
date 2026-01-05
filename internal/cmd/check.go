@@ -6,8 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/IRevolve/Bear/internal/loader"
-	"github.com/IRevolve/Bear/internal/scanner"
+	"github.com/IRevolve/Bear/internal"
 )
 
 // ValidationResult contains the result of a validation
@@ -36,9 +35,9 @@ func Check(configPath string) error {
 	fmt.Println("===========================")
 	fmt.Println()
 
-	// 1. Lade Config
+	// 1. Load config
 	fmt.Print("📄 Loading config... ")
-	cfg, err := loader.Load(configPath)
+	cfg, err := internal.Load(configPath)
 	if err != nil {
 		fmt.Println("❌")
 		result.AddError("Failed to load config: %v", err)
@@ -51,7 +50,7 @@ func Check(configPath string) error {
 		rootPath, _ = os.Getwd()
 	}
 
-	// 2. Prüfe Languages
+	// 2. Check languages
 	fmt.Print("🔤 Checking languages... ")
 	if len(cfg.Languages) == 0 {
 		result.AddWarning("No languages defined")
@@ -65,7 +64,7 @@ func Check(configPath string) error {
 		}
 	}
 
-	// 3. Prüfe Targets
+	// 3. Check targets
 	fmt.Print("🎯 Checking targets... ")
 	if len(cfg.Targets) == 0 {
 		result.AddWarning("No targets defined")
@@ -78,9 +77,9 @@ func Check(configPath string) error {
 		targetNames[t.Name] = true
 	}
 
-	// 4. Scanne Artifacts
+	// 4. Scan artifacts
 	fmt.Print("📦 Scanning artifacts... ")
-	artifacts, err := scanner.ScanArtifacts(rootPath, cfg)
+	artifacts, err := internal.ScanArtifacts(rootPath, cfg)
 	if err != nil {
 		fmt.Println("❌")
 		result.AddError("Failed to scan artifacts: %v", err)
@@ -99,8 +98,8 @@ func Check(configPath string) error {
 		fmt.Printf("✓ %d found (%d services, %d libraries)\n", len(artifacts), len(artifacts)-libs, libs)
 	}
 
-	// 5. Erstelle Artifact-Map
-	artifactMap := make(map[string]scanner.DiscoveredArtifact)
+	// 5. Create artifact map
+	artifactMap := make(map[string]internal.DiscoveredArtifact)
 	for _, a := range artifacts {
 		if existing, ok := artifactMap[a.Artifact.Name]; ok {
 			result.AddError("Duplicate artifact name '%s' in:\n       - %s\n       - %s",
@@ -160,7 +159,7 @@ func Check(configPath string) error {
 }
 
 // findCycles finds circular dependencies
-func findCycles(artifacts []scanner.DiscoveredArtifact) [][]string {
+func findCycles(artifacts []internal.DiscoveredArtifact) [][]string {
 	var cycles [][]string
 
 	// Build adjacency map

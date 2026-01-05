@@ -1,10 +1,9 @@
-package loader
+package internal
 
 import (
 	"fmt"
 
 	"github.com/IRevolve/Bear/internal/config"
-	"github.com/IRevolve/Bear/internal/presets"
 )
 
 // Load loads a config and resolves all presets
@@ -33,7 +32,7 @@ func resolveLanguages(cfg *config.Config) error {
 		return nil
 	}
 
-	manager := presets.NewManager()
+	manager := NewManager()
 
 	// Create map of already defined languages
 	existing := make(map[string]bool)
@@ -66,7 +65,7 @@ func resolveTargets(cfg *config.Config) error {
 		return nil
 	}
 
-	manager := presets.NewManager()
+	manager := NewManager()
 
 	// Create map of already defined targets
 	existing := make(map[string]bool)

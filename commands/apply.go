@@ -32,7 +32,7 @@ Examples:
   bear apply user-api --force          # Force apply, remove pin
   bear apply --commit                  # Apply and commit lock file with [skip ci]`,
 	RunE: func(c *cobra.Command, args []string) error {
-		// Konvertiere zu absolutem Pfad
+		// Convert to absolute path
 		absDir, err := filepath.Abs(workDir)
 		if err != nil {
 			return fmt.Errorf("invalid path: %w", err)

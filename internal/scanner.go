@@ -1,4 +1,4 @@
-package scanner
+package internal
 
 import (
 	"os"
@@ -80,7 +80,7 @@ func detectLanguage(dir string, languages []config.Language) string {
 			}
 		}
 
-		// Prüfe Pattern
+		// Check pattern
 		if lang.Detection.Pattern != "" {
 			matches, err := filepath.Glob(filepath.Join(dir, lang.Detection.Pattern))
 			if err == nil && len(matches) > 0 {

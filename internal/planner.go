@@ -1,4 +1,4 @@
-package planner
+package internal
 
 import (
 	"os/exec"
@@ -6,8 +6,6 @@ import (
 	"strings"
 
 	"github.com/IRevolve/Bear/internal/config"
-	"github.com/IRevolve/Bear/internal/detector"
-	"github.com/IRevolve/Bear/internal/scanner"
 )
 
 // ActionType defines the type of action
@@ -21,7 +19,7 @@ const (
 
 // PlannedAction represents a planned action
 type PlannedAction struct {
-	Artifact       scanner.DiscoveredArtifact
+	Artifact       DiscoveredArtifact
 	Action         ActionType
 	Reason         string
 	Steps          []config.Step
@@ -29,7 +27,7 @@ type PlannedAction struct {
 	RollbackCommit string // If set, this commit will be deployed (rollback)
 }
 
-// Plan enthält alle geplanten Aktionen
+// Plan contains all planned actions
 type Plan struct {
 	Actions      []PlannedAction
 	TotalChanges int
@@ -49,15 +47,15 @@ type PlanOptions struct {
 
 // CreatePlanWithOptions creates a plan with extended options
 func CreatePlanWithOptions(rootPath string, cfg *config.Config, opts PlanOptions) (*Plan, error) {
-	// Lade Lock-Datei
+	// Load lock file
 	lockPath := filepath.Join(rootPath, "bear.lock.yml")
 	lockFile, err := config.LoadLock(lockPath)
 	if err != nil {
 		return nil, err
 	}
 
-	// Scanne alle Artefakte
-	artifacts, err := scanner.ScanArtifacts(rootPath, cfg)
+	// Scan all artifacts
+	artifacts, err := ScanArtifacts(rootPath, cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -73,12 +71,11 @@ func CreatePlanWithOptions(rootPath string, cfg *config.Config, opts PlanOptions
 	}
 
 	// Get current commit
-	currentCommit := detector.GetCurrentCommit(rootPath)
+	currentCommit := GetCurrentCommit(rootPath)
 
 	// Get uncommitted/untracked changes (same for all artifacts)
-	uncommittedFiles, _ := detector.GetUncommittedChanges(rootPath)
-	uncommittedDirs := detector.GetAffectedDirs(uncommittedFiles)
-
+	uncommittedFiles, _ := GetUncommittedChanges(rootPath)
+	uncommittedDirs := GetAffectedDirs(uncommittedFiles)
 	plan := &Plan{
 		TotalChanges: len(uncommittedFiles),
 		LockFile:     lockFile,
@@ -100,20 +97,20 @@ func CreatePlanWithOptions(rootPath string, cfg *config.Config, opts PlanOptions
 			continue
 		}
 
-		// 1. Prüfe uncommitted changes
+		// 1. Check uncommitted changes
 		affected, files := isArtifactAffected(relPath, uncommittedFiles, uncommittedDirs)
 
-		// 2. Prüfe Änderungen seit dem letzten Deployment
+		// 2. Check changes since last deployment
 		lastDeployed := lockFile.GetLastDeployedCommit(artifact.Artifact.Name)
 		if lastDeployed != "" && lastDeployed != currentCommit {
-			// Hole Änderungen zwischen lastDeployed und aktuellem HEAD
-			commitChanges, err := detector.GetChangedFilesBetweenCommits(rootPath, lastDeployed, "HEAD")
+			// Get changes between lastDeployed and current HEAD
+			commitChanges, err := GetChangedFilesBetweenCommits(rootPath, lastDeployed, "HEAD")
 			if err != nil {
-				// Commit nicht gefunden (z.B. fiktiver Commit in Lock-Datei) - als geändert markieren
+				// Commit not found (e.g. fictitious commit in lock file) - mark as changed
 				affected = true
 				files = append(files, relPath+" (deployed commit not found)")
 			} else {
-				commitAffected, commitFiles := isArtifactAffected(relPath, commitChanges, detector.GetAffectedDirs(commitChanges))
+				commitAffected, commitFiles := isArtifactAffected(relPath, commitChanges, GetAffectedDirs(commitChanges))
 				if commitAffected {
 					affected = true
 					files = append(files, commitFiles...)
@@ -121,7 +118,7 @@ func CreatePlanWithOptions(rootPath string, cfg *config.Config, opts PlanOptions
 				}
 			}
 		} else if lastDeployed == "" {
-			// Noch nie deployed - als geändert markieren wenn staged/committed
+			// Never deployed - mark as changed if staged/committed
 			cmd := exec.Command("git", "ls-files", relPath)
 			cmd.Dir = rootPath
 			if output, err := cmd.Output(); err == nil && len(output) > 0 {
@@ -131,7 +128,7 @@ func CreatePlanWithOptions(rootPath string, cfg *config.Config, opts PlanOptions
 		}
 
 		if affected {
-			// Finde die Validation-Steps für die Sprache
+			// Find the validation steps for the language
 			var validationSteps []config.Step
 			for _, lang := range cfg.Languages {
 				if lang.Name == artifact.Language {
@@ -143,7 +140,7 @@ func CreatePlanWithOptions(rootPath string, cfg *config.Config, opts PlanOptions
 				}
 			}
 
-			// Finde Deploy-Steps vom Target (nur für Nicht-Libraries)
+			// Find deploy steps from target (only for non-libraries)
 			var deploySteps []config.Step
 			if !artifact.Artifact.IsLib {
 				for _, t := range cfg.Targets {
@@ -163,7 +160,7 @@ func CreatePlanWithOptions(rootPath string, cfg *config.Config, opts PlanOptions
 			})
 			plan.ToValidate++
 
-			// Wenn es ein deploybares Artefakt ist (keine Library), füge Deploy-Aktion hinzu
+			// If it's a deployable artifact (not a library), add deploy action
 			if !artifact.Artifact.IsLib && len(deploySteps) > 0 {
 				plan.Actions = append(plan.Actions, PlannedAction{
 					Artifact:     artifact,
@@ -184,13 +181,13 @@ func CreatePlanWithOptions(rootPath string, cfg *config.Config, opts PlanOptions
 		}
 	}
 
-	// Füge abhängige Artefakte hinzu
+	// Add dependent artifacts
 	plan.addDependentArtifacts(artifacts, cfg)
 
 	return plan, nil
 }
 
-func isArtifactAffected(artifactPath string, changedFiles []detector.ChangedFile, affectedDirs map[string]bool) (bool, []string) {
+func isArtifactAffected(artifactPath string, changedFiles []ChangedFile, affectedDirs map[string]bool) (bool, []string) {
 	var affected []string
 
 	for _, f := range changedFiles {
@@ -202,8 +199,8 @@ func isArtifactAffected(artifactPath string, changedFiles []detector.ChangedFile
 	return len(affected) > 0, affected
 }
 
-func (p *Plan) addDependentArtifacts(artifacts []scanner.DiscoveredArtifact, cfg *config.Config) {
-	// Sammle Namen der geänderten Artefakte (validiert oder deployed)
+func (p *Plan) addDependentArtifacts(artifacts []DiscoveredArtifact, cfg *config.Config) {
+	// Collect names of changed artifacts (validated or deployed)
 	changedNames := make(map[string]bool)
 	for _, action := range p.Actions {
 		if action.Action == ActionDeploy || action.Action == ActionValidate {
@@ -211,7 +208,7 @@ func (p *Plan) addDependentArtifacts(artifacts []scanner.DiscoveredArtifact, cfg
 		}
 	}
 
-	// Iteriere mehrfach um transitive Dependencies zu finden
+	// Iterate multiple times to find transitive dependencies
 	changed := true
 	for changed {
 		changed = false
@@ -219,7 +216,7 @@ func (p *Plan) addDependentArtifacts(artifacts []scanner.DiscoveredArtifact, cfg
 			if action.Action == ActionSkip {
 				for _, dep := range action.Artifact.Artifact.DependsOn {
 					if changedNames[dep] {
-						// Finde Validation-Steps für die Sprache
+						// Find validation steps for the language
 						var validationSteps []config.Step
 						for _, lang := range cfg.Languages {
 							if lang.Name == action.Artifact.Language {
@@ -237,7 +234,7 @@ func (p *Plan) addDependentArtifacts(artifacts []scanner.DiscoveredArtifact, cfg
 						p.ToSkip--
 						p.ToValidate++
 
-						// Füge Deploy-Aktion hinzu (nur für Nicht-Libraries)
+						// Add deploy action (only for non-libraries)
 						if !action.Artifact.Artifact.IsLib {
 							for _, t := range cfg.Targets {
 								if t.Name == action.Artifact.Artifact.Target {
@@ -263,8 +260,8 @@ func (p *Plan) addDependentArtifacts(artifacts []scanner.DiscoveredArtifact, cfg
 	}
 }
 
-// filterArtifacts filtert Artefakte nach den angegebenen Namen
-func filterArtifacts(artifacts []scanner.DiscoveredArtifact, targets []string) []scanner.DiscoveredArtifact {
+// filterArtifacts filters artifacts by the specified names
+func filterArtifacts(artifacts []DiscoveredArtifact, targets []string) []DiscoveredArtifact {
 	if len(targets) == 0 {
 		return artifacts
 	}
@@ -274,7 +271,7 @@ func filterArtifacts(artifacts []scanner.DiscoveredArtifact, targets []string) [
 		targetMap[t] = true
 	}
 
-	var filtered []scanner.DiscoveredArtifact
+	var filtered []DiscoveredArtifact
 	for _, a := range artifacts {
 		if targetMap[a.Artifact.Name] {
 			filtered = append(filtered, a)
@@ -284,8 +281,8 @@ func filterArtifacts(artifacts []scanner.DiscoveredArtifact, targets []string) [
 	return filtered
 }
 
-// createRollbackPlan erstellt einen Plan für ein Rollback auf einen bestimmten Commit
-func createRollbackPlan(artifacts []scanner.DiscoveredArtifact, cfg *config.Config, lockFile *config.LockFile, lockPath string, rollbackCommit string) *Plan {
+// createRollbackPlan creates a plan for rollback to a specific commit
+func createRollbackPlan(artifacts []DiscoveredArtifact, cfg *config.Config, lockFile *config.LockFile, lockPath string, rollbackCommit string) *Plan {
 	plan := &Plan{
 		LockFile: lockFile,
 		LockPath: lockPath,
@@ -297,7 +294,7 @@ func createRollbackPlan(artifacts []scanner.DiscoveredArtifact, cfg *config.Conf
 	}
 
 	for _, artifact := range artifacts {
-		// Finde die Validation-Steps für die Sprache
+		// Find the validation steps for the language
 		var validationSteps []config.Step
 		for _, lang := range cfg.Languages {
 			if lang.Name == artifact.Language {
@@ -309,7 +306,7 @@ func createRollbackPlan(artifacts []scanner.DiscoveredArtifact, cfg *config.Conf
 			}
 		}
 
-		// Validation-Aktion
+		// Validation action
 		plan.Actions = append(plan.Actions, PlannedAction{
 			Artifact:       artifact,
 			Action:         ActionValidate,
@@ -319,7 +316,7 @@ func createRollbackPlan(artifacts []scanner.DiscoveredArtifact, cfg *config.Conf
 		})
 		plan.ToValidate++
 
-		// Deploy-Aktion nur für Nicht-Libraries
+		// Deploy action only for non-libraries
 		if !artifact.Artifact.IsLib {
 			var deploySteps []config.Step
 			for _, t := range cfg.Targets {

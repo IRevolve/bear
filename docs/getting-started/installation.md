@@ -5,7 +5,7 @@
 The easiest way to install Bear is via `go install`:
 
 ```bash
-go install github.com/IRevolve/Bear/cmd@latest
+go install github.com/IRevolve/Bear@latest
 ```
 
 This installs the `bear` binary to your `$GOPATH/bin`.
@@ -17,7 +17,7 @@ Clone the repository and build:
 ```bash
 git clone https://github.com/IRevolve/Bear.git
 cd Bear
-go build -o bear ./cmd/main.go
+go build -o bear .
 ```
 
 Move the binary to your PATH:
