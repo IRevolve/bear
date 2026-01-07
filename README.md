@@ -160,8 +160,7 @@ bear plan -d ./other-project
 ### Global Flags
 
 | Flag | Description |
-|------|
--------------|
+|------|-------------|
 | `-d, --dir <path>` | Path to project directory (default: `.`) |
 | `-f, --force` | Force operation, ignore pinned artifacts |
 
