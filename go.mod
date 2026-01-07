@@ -1,4 +1,4 @@
-module github.com/IRevolve/Bear
+module github.com/irevolve/bear
 
 go 1.25
 

@@ -14,19 +14,19 @@ A Terraform-inspired CI/CD tool for monorepos. Bear detects changes, resolves de
 - ⏪ **Rollback** — Redeploy any previous version
 - 🌍 **Multi-language** — Go, Node.js, Python, Rust, Java, TypeScript (extensible)
 - 🎯 **Configurable targets** — Docker, CloudRun, Kubernetes, Lambda, S3, Helm
-- 📦 **Community presets** — Import pre-built language and target configs from [bear-presets](https://github.com/IRevolve/bear-presets)
+- 📦 **Community presets** — Import pre-built language and target configs from [bear-presets](https://github.com/irevolve/bear-presets)
 
 ## Installation
 
 ```bash
-go install github.com/IRevolve/Bear@latest
+go install github.com/irevolve/bear@latest
 ```
 
 Or build from source:
 
 ```bash
-git clone https://github.com/IRevolve/Bear.git
-cd Bear
+git clone https://github.com/irevolve/bear.git
+cd bear
 go build -o bear .
 ```
 
@@ -323,7 +323,7 @@ Apache 2.0
 
 ## Presets
 
-Bear loads community presets from [bear-presets](https://github.com/IRevolve/bear-presets). Presets are cached locally in `~/.bear/presets/` for 24 hours.
+Bear loads community presets from [bear-presets](https://github.com/irevolve/bear-presets). Presets are cached locally in `~/.bear/presets/` for 24 hours.
 
 ### Available Languages
 
@@ -351,4 +351,4 @@ Bear loads community presets from [bear-presets](https://github.com/IRevolve/bea
 
 ### Contributing Presets
 
-Want to add or improve a preset? Contribute to [bear-presets](https://github.com/IRevolve/bear-presets)!
+Want to add or improve a preset? Contribute to [bear-presets](https://github.com/irevolve/bear-presets)!

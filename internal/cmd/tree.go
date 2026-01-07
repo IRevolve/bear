@@ -7,8 +7,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/IRevolve/Bear/internal"
-	"github.com/IRevolve/Bear/internal/config"
+	"github.com/irevolve/bear/internal"
+	"github.com/irevolve/bear/internal/config"
 )
 
 func Tree(configPath string, filterArtifacts []string) error {

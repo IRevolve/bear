@@ -121,4 +121,4 @@ Presets are cached locally in `~/.bear/presets/` for 24 hours. The cache is auto
 ## See Also
 
 - [Presets Configuration](../configuration/presets.md)
-- [bear-presets Repository](https://github.com/IRevolve/bear-presets)
+- [bear-presets Repository](https://github.com/irevolve/bear-presets)

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/IRevolve/Bear/internal"
+	"github.com/irevolve/bear/internal"
 	"github.com/spf13/cobra"
 )
 
@@ -13,7 +13,7 @@ var presetCmd = &cobra.Command{
 	Short: "Manage presets",
 	Long: `Manage language and target presets.
 
-Presets are fetched from https://github.com/IRevolve/bear-presets
+Presets are fetched from https://github.com/irevolve/bear-presets
 and cached locally in ~/.bear/presets/
 
 Commands:
