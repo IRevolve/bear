@@ -3,7 +3,7 @@ package main
 import (
 	"os"
 
-	"github.com/IRevolve/Bear/commands"
+	"github.com/irevolve/bear/commands"
 )
 
 func main() {

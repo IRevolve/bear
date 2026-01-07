@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/IRevolve/Bear/internal"
+	"github.com/irevolve/bear/internal"
 )
 
 // ValidationResult contains the result of a validation

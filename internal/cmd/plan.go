@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/IRevolve/Bear/internal"
+	"github.com/irevolve/bear/internal"
 )
 
 func PlanWithOptions(configPath string, opts Options) error {

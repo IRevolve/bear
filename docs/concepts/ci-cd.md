@@ -186,7 +186,7 @@ jobs:
           go-version: '1.21'
       
       - name: Install Bear
-        run: go install github.com/IRevolve/Bear@latest
+        run: go install github.com/irevolve/bear@latest
       
       - name: Configure Git
         run: |
@@ -221,7 +221,7 @@ deploy:
         - "!bear.lock.yml"
   
   before_script:
-    - go install github.com/IRevolve/Bear@latest
+    - go install github.com/irevolve/bear@latest
     - git config user.name "GitLab CI"
     - git config user.email "ci@gitlab.com"
   

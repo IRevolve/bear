@@ -8,13 +8,13 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/IRevolve/Bear/internal/config"
+	"github.com/irevolve/bear/internal/config"
 	"gopkg.in/yaml.v3"
 )
 
 const (
 	// DefaultPresetsRepo is the default repository for presets
-	DefaultPresetsRepo = "https://raw.githubusercontent.com/IRevolve/bear-presets/main"
+	DefaultPresetsRepo = "https://raw.githubusercontent.com/irevolve/bear-presets/main"
 
 	// CacheDir is the local cache directory
 	CacheDir = ".bear/presets"

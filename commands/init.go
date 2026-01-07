@@ -7,7 +7,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/IRevolve/Bear/internal"
+	"github.com/irevolve/bear/internal"
 	"github.com/spf13/cobra"
 )
 
