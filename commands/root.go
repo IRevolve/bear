@@ -1,8 +1,13 @@
 package commands
 
 import (
+	"fmt"
+
 	"github.com/spf13/cobra"
 )
+
+// Version is set at build time via -ldflags
+var Version = "dev"
 
 var (
 	// Globale Flags
@@ -11,8 +16,9 @@ var (
 )
 
 var rootCmd = &cobra.Command{
-	Use:   "bear",
-	Short: "Bear - Build, Evaluate, Apply, Repeat",
+	Use:     "bear",
+	Short:   "Bear - Build, Evaluate, Apply, Repeat",
+	Version: Version,
 	Long: `Bear is a CI/CD tool for monorepos that automatically detects
 changes, validates affected artifacts, and deploys them to various targets.
 
@@ -38,4 +44,7 @@ func init() {
 	// Globale Flags
 	rootCmd.PersistentFlags().StringVarP(&workDir, "dir", "d", ".", "Path to project directory")
 	rootCmd.PersistentFlags().BoolVarP(&force, "force", "f", false, "Force operation, ignoring pinned artifacts")
+	
+	// Version template
+	rootCmd.SetVersionTemplate(fmt.Sprintf("bear version %s\n", Version))
 }
