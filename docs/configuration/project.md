@@ -65,7 +65,7 @@ name: my-platform
 
 ### `use`
 
-Import presets from the [bear-presets](https://github.com/IRevolve/bear-presets) repository.
+Import presets from the [bear-presets](https://github.com/irevolve/bear-presets) repository.
 
 ```yaml
 use:

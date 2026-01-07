@@ -1,6 +1,6 @@
 # Presets
 
-Bear loads community presets from [bear-presets](https://github.com/IRevolve/bear-presets). This allows you to use pre-built configurations without defining them yourself.
+Bear loads community presets from [bear-presets](https://github.com/irevolve/bear-presets). This allows you to use pre-built configurations without defining them yourself.
 
 ## Using Presets
 
@@ -126,6 +126,6 @@ languages:
 
 ## Contributing Presets
 
-Want to add or improve a preset? Contribute to [bear-presets](https://github.com/IRevolve/bear-presets)!
+Want to add or improve a preset? Contribute to [bear-presets](https://github.com/irevolve/bear-presets)!
 
 See the repository README for contribution guidelines.

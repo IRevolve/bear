@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/IRevolve/Bear/internal"
-	"github.com/IRevolve/Bear/internal/config"
+	"github.com/irevolve/bear/internal"
+	"github.com/irevolve/bear/internal/config"
 )
 
 func ApplyWithOptions(configPath string, opts Options) error {

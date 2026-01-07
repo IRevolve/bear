@@ -5,7 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/IRevolve/Bear/internal/cmd"
+	"github.com/irevolve/bear/internal/cmd"
 	"github.com/spf13/cobra"
 )
 

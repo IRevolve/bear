@@ -4,7 +4,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/IRevolve/Bear/internal/config"
+	"github.com/irevolve/bear/internal/config"
 )
 
 // DiscoveredArtifact contains an artifact with its path and detected language

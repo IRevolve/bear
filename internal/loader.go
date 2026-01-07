@@ -3,7 +3,7 @@ package internal
 import (
 	"fmt"
 
-	"github.com/IRevolve/Bear/internal/config"
+	"github.com/irevolve/bear/internal/config"
 )
 
 // Load loads a config and resolves all presets

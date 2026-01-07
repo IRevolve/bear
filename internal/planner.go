@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/IRevolve/Bear/internal/config"
+	"github.com/irevolve/bear/internal/config"
 )
 
 // ActionType defines the type of action

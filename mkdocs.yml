@@ -1,8 +1,8 @@
 site_name: Bear
 site_description: A Terraform-inspired CI/CD tool for monorepos
-site_url: https://irevolve.github.io/Bear
-repo_url: https://github.com/IRevolve/Bear
-repo_name: IRevolve/Bear
+site_url: https://irevolve.github.io/bear
+repo_url: https://github.com/irevolve/bear
+repo_name: irevolve/bear
 
 theme:
   name: material
@@ -81,4 +81,4 @@ plugins:
 extra:
   social:
     - icon: fontawesome/brands/github
-      link: https://github.com/IRevolve/Bear
+      link: https://github.com/irevolve/bear
