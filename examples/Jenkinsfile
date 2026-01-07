@@ -1,0 +1,86 @@
+// Bear CI/CD Pipeline for Jenkins
+// 
+// This pipeline demonstrates how to use Bear in Jenkins for monorepo deployments.
+// It supports both Docker-based and Go-install approaches.
+
+pipeline {
+    agent any
+
+    options {
+        skipDefaultCheckout(false)
+        timestamps()
+        disableConcurrentBuilds()
+    }
+
+    environment {
+        // Skip pipeline if commit is a lock file update
+        SKIP_CI = sh(
+            script: 'git log -1 --pretty=%B | grep -q "\\[skip ci\\]" && echo true || echo false',
+            returnStdout: true
+        ).trim()
+    }
+
+    stages {
+        stage('Check Skip CI') {
+            steps {
+                script {
+                    if (env.SKIP_CI == 'true') {
+                        echo 'Skipping build - lock file update detected'
+                        currentBuild.result = 'NOT_BUILT'
+                        error('Skipping build due to [skip ci] in commit message')
+                    }
+                }
+            }
+        }
+
+        stage('Install Bear') {
+            steps {
+                sh '''
+                    # Option 1: Download from GitHub releases
+                    curl -sL "https://github.com/irevolve/bear/releases/latest/download/bear-linux-amd64" -o bear
+                    chmod +x bear
+                    
+                    # Option 2: Install via Go (if Go is available)
+                    # go install github.com/irevolve/bear@latest
+                '''
+            }
+        }
+
+        stage('Validate') {
+            steps {
+                // Run validation (lint, test) for changed artifacts
+                sh './bear plan --validate'
+            }
+        }
+
+        stage('Deploy') {
+            when {
+                branch 'main'
+            }
+            steps {
+                withCredentials([usernamePassword(
+                    credentialsId: 'git-credentials',
+                    usernameVariable: 'GIT_USER',
+                    passwordVariable: 'GIT_TOKEN'
+                )]) {
+                    sh '''
+                        git remote set-url origin https://${GIT_USER}:${GIT_TOKEN}@github.com/your-org/your-repo.git
+                        ./bear apply --commit
+                    '''
+                }
+            }
+        }
+    }
+
+    post {
+        always {
+            cleanWs()
+        }
+        success {
+            echo 'Bear deployment completed successfully'
+        }
+        failure {
+            echo 'Bear deployment failed'
+        }
+    }
+}

@@ -11,7 +11,6 @@ Bear provides a simple set of commands for managing your monorepo builds.
 | [`bear plan`](plan.md) | Show planned validations and deployments |
 | [`bear apply`](apply.md) | Execute the plan |
 | [`bear check`](check.md) | Validate configuration |
-| [`bear tree`](tree.md) | Show dependency tree |
 | [`bear preset`](preset.md) | Manage presets |
 
 ## Global Flags
@@ -21,9 +20,7 @@ These flags work with all commands:
 | Flag | Description |
 |------|-------------|
 | `-d, --dir <path>` | Path to project directory (default: `.`) |
-| `--dry-run` | Show what would happen without executing |
 | `-f, --force` | Force operation, ignore pinned artifacts |
-| `--rollback <commit>` | Rollback and pin to a specific commit |
 | `-h, --help` | Show help |
 
 ## Workflow

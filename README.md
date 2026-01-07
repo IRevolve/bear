@@ -135,11 +135,8 @@ bear apply
 # Target specific artifacts
 bear plan user-api order-api
 
-# Rollback to a previous version
-bear apply user-api --rollback=abc1234
-
-# Dry run (no actual execution)
-bear apply --dry-run
+# Pin artifact to a specific version
+bear apply user-api --pin abc1234
 
 # Different project directory
 bear plan -d ./other-project
@@ -151,10 +148,11 @@ bear plan -d ./other-project
 |---------|-------------|
 | `bear init` | Initialize a new Bear project |
 | `bear list` | List all discovered artifacts |
+| `bear list --tree` | Show dependency tree |
 | `bear plan [artifacts...]` | Show planned validations and deployments |
+| `bear plan --validate` | Plan and run validation (lint, test) |
 | `bear apply [artifacts...]` | Execute the plan (validate, then deploy) |
 | `bear check` | Validate configuration and dependencies |
-| `bear tree [artifact]` | Show dependency tree |
 | `bear preset list` | Show available presets |
 | `bear preset show <type> <name>` | Show preset details |
 | `bear preset update` | Refresh preset cache |
@@ -162,19 +160,25 @@ bear plan -d ./other-project
 ### Global Flags
 
 | Flag | Description |
-|------|-------------|
+|------|
+-------------|
 | `-d, --dir <path>` | Path to project directory (default: `.`) |
-| `--dry-run` | Show what would happen without executing |
-| `--rollback <commit>` | Rollback and pin to a specific commit |
 | `-f, --force` | Force operation, ignore pinned artifacts |
 
-### Rollback & Pinning
+### Apply Flags
 
-When you rollback an artifact, it gets **pinned** to that version:
+| Flag | Description |
+|------|-------------|
+| `--pin <commit>` | Pin artifact to a specific commit |
+| `-c, --commit` | Commit and push lock file with [skip ci] |
+
+### Pinning
+
+When you pin an artifact, it stays at that version:
 
 ```bash
-# Rollback user-api to commit abc1234 (pins the artifact)
-bear apply user-api --rollback=abc1234
+# Pin user-api to commit abc1234
+bear apply user-api --pin abc1234
 
 # Future applies will skip pinned artifacts
 bear plan  # Shows: user-api 📌 PINNED

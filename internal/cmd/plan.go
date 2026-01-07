@@ -3,10 +3,12 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 
 	"github.com/irevolve/bear/internal"
+	"github.com/irevolve/bear/internal/config"
 )
 
 func PlanWithOptions(configPath string, opts Options) error {
@@ -21,9 +23,9 @@ func PlanWithOptions(configPath string, opts Options) error {
 	}
 
 	planOpts := internal.PlanOptions{
-		Artifacts:      opts.Artifacts,
-		RollbackCommit: opts.RollbackCommit,
-		Force:          opts.Force,
+		Artifacts: opts.Artifacts,
+		PinCommit: opts.PinCommit,
+		Force:     opts.Force,
 	}
 
 	plan, err := internal.CreatePlanWithOptions(rootPath, cfg, planOpts)
@@ -33,14 +35,77 @@ func PlanWithOptions(configPath string, opts Options) error {
 
 	printPlan(plan, rootPath, opts)
 
+	// Run validation if --validate flag is set
+	if opts.Validate && (plan.ToValidate > 0 || plan.ToDeploy > 0) {
+		fmt.Println()
+		fmt.Println("🔍 Running validation...")
+		fmt.Println()
+
+		for _, action := range plan.Actions {
+			if action.Action == internal.ActionSkip {
+				continue
+			}
+
+			fmt.Printf("  → %s\n", action.Artifact.Artifact.Name)
+
+			for _, step := range action.Steps {
+				// Only run validation steps (lint, test, check)
+				if !isValidationStep(step.Name) {
+					continue
+				}
+
+				fmt.Printf("    • %s\n", step.Name)
+
+				if err := executeValidationStep(step, action.Artifact.Path, action.Artifact.Artifact.Params, cfg); err != nil {
+					fmt.Printf("    ❌ Failed: %v\n", err)
+					return fmt.Errorf("validation failed for %s: %w", action.Artifact.Artifact.Name, err)
+				}
+				fmt.Printf("    ✓ Passed\n")
+			}
+		}
+
+		fmt.Println()
+		fmt.Println("✅ All validations passed!")
+	}
+
 	return nil
+}
+
+// isValidationStep checks if a step name indicates a validation step
+func isValidationStep(name string) bool {
+	name = strings.ToLower(name)
+	return strings.Contains(name, "lint") ||
+		strings.Contains(name, "test") ||
+		strings.Contains(name, "check") ||
+		strings.Contains(name, "validate") ||
+		strings.Contains(name, "vet") ||
+		strings.Contains(name, "fmt")
+}
+
+// executeValidationStep runs a validation step
+func executeValidationStep(step config.Step, workDir string, params map[string]string, cfg *config.Config) error {
+	cmd := step.Run
+
+	// Replace params in command
+	for key, value := range params {
+		cmd = strings.ReplaceAll(cmd, fmt.Sprintf("${%s}", key), value)
+		cmd = strings.ReplaceAll(cmd, fmt.Sprintf("$%s", key), value)
+	}
+
+	// Execute
+	execCmd := exec.Command("sh", "-c", cmd)
+	execCmd.Dir = workDir
+	execCmd.Stdout = os.Stdout
+	execCmd.Stderr = os.Stderr
+
+	return execCmd.Run()
 }
 
 func printPlan(plan *internal.Plan, rootPath string, opts Options) {
 	fmt.Println()
-	if opts.RollbackCommit != "" {
-		fmt.Println("Bear Rollback Plan")
-		fmt.Println("==================")
+	if opts.PinCommit != "" {
+		fmt.Println("Bear Pin Plan")
+		fmt.Println("=============")
 	} else {
 		fmt.Println("Bear Execution Plan")
 		fmt.Println("===================")
@@ -51,8 +116,8 @@ func printPlan(plan *internal.Plan, rootPath string, opts Options) {
 		fmt.Printf("🎯 Artifacts: %s\n\n", strings.Join(opts.Artifacts, ", "))
 	}
 
-	if opts.RollbackCommit != "" {
-		fmt.Printf("⏪ Rolling back to: %s\n\n", opts.RollbackCommit)
+	if opts.PinCommit != "" {
+		fmt.Printf("📌 Pinning to: %s\n\n", opts.PinCommit)
 	}
 
 	if plan.TotalChanges > 0 {

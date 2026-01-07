@@ -9,6 +9,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var validate bool
+
 var planCmd = &cobra.Command{
 	Use:   "plan [artifacts...]",
 	Short: "Show what would be validated/deployed based on changes",
@@ -18,10 +20,13 @@ and what actions would be taken (validate, deploy, skip).
 The plan compares each artifact against its last deployed commit
 (from bear.lock.yml) to determine what needs to be built and deployed.
 
+Use --validate to also run validation commands (lint, test) for changed artifacts.
+
 Examples:
   bear plan                      # Plan all changed artifacts
   bear plan user-api             # Plan specific artifact
   bear plan user-api order-api   # Plan multiple artifacts
+  bear plan --validate           # Plan and run validation
   bear plan -d ./other-project   # Plan in different directory`,
 	RunE: func(c *cobra.Command, args []string) error {
 		// Convert to absolute path
@@ -36,10 +41,9 @@ Examples:
 		}
 
 		opts := cmd.Options{
-			Artifacts:      args, // Positional args are the artifacts
-			RollbackCommit: rollback,
-			DryRun:         dryRun,
-			Force:          force,
+			Artifacts: args, // Positional args are the artifacts
+			Validate:  validate,
+			Force:     force,
 		}
 
 		return cmd.PlanWithOptions(configPath, opts)
@@ -47,5 +51,6 @@ Examples:
 }
 
 func init() {
+	planCmd.Flags().BoolVar(&validate, "validate", false, "Run validation commands (lint, test) for changed artifacts")
 	rootCmd.AddCommand(planCmd)
 }

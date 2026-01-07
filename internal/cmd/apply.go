@@ -23,9 +23,9 @@ func ApplyWithOptions(configPath string, opts Options) error {
 	}
 
 	planOpts := internal.PlanOptions{
-		Artifacts:      opts.Artifacts,
-		RollbackCommit: opts.RollbackCommit,
-		Force:          opts.Force,
+		Artifacts: opts.Artifacts,
+		PinCommit: opts.PinCommit,
+		Force:     opts.Force,
 	}
 
 	plan, err := internal.CreatePlanWithOptions(rootPath, cfg, planOpts)
@@ -45,12 +45,12 @@ func ApplyWithOptions(configPath string, opts Options) error {
 	currentCommit := internal.GetCurrentCommit(rootPath)
 	deployVersion := currentCommit
 
-	// For rollback, use the rollback commit for the version
-	if opts.RollbackCommit != "" {
-		deployVersion = opts.RollbackCommit
+	// For pin, use the pinned commit for the version
+	if opts.PinCommit != "" {
+		deployVersion = opts.PinCommit
 		fmt.Println()
-		fmt.Println("⚠️  ROLLBACK MODE")
-		fmt.Printf("   Rolling back to commit: %s\n", opts.RollbackCommit[:min(8, len(opts.RollbackCommit))])
+		fmt.Println("📌 PIN MODE")
+		fmt.Printf("   Pinning to commit: %s\n", opts.PinCommit[:min(8, len(opts.PinCommit))])
 	}
 
 	fmt.Println()
@@ -76,11 +76,6 @@ func ApplyWithOptions(configPath string, opts Options) error {
 		for _, v := range validates {
 			fmt.Printf("  🔍 %s\n", v.Artifact.Artifact.Name)
 
-			if opts.DryRun {
-				fmt.Printf("     [dry-run] Would execute %d steps\n", len(v.Steps))
-				continue
-			}
-
 			for _, step := range v.Steps {
 				fmt.Printf("     → %s\n", step.Name)
 
@@ -104,11 +99,6 @@ func ApplyWithOptions(configPath string, opts Options) error {
 		for _, d := range deploys {
 			fmt.Printf("  📦 %s → %s\n", d.Artifact.Artifact.Name, d.Artifact.Artifact.Target)
 
-			if opts.DryRun {
-				fmt.Printf("     [dry-run] Would execute %d steps\n", len(d.Steps))
-				continue
-			}
-
 			// Merge target defaults with artifact params
 			params := mergeParams(cfg, d.Artifact.Artifact.Target, d.Artifact.Artifact.Params)
 			params["NAME"] = d.Artifact.Artifact.Name
@@ -125,8 +115,8 @@ func ApplyWithOptions(configPath string, opts Options) error {
 			}
 
 			// Update lock file after successful deployment
-			// For rollback, the artifact is pinned (unless with --force)
-			if opts.RollbackCommit != "" && !opts.Force {
+			// For pin, the artifact is pinned (unless with --force)
+			if opts.PinCommit != "" && !opts.Force {
 				plan.LockFile.UpdateArtifactPinned(
 					d.Artifact.Artifact.Name,
 					deployVersion,
@@ -147,22 +137,20 @@ func ApplyWithOptions(configPath string, opts Options) error {
 		}
 
 		// Save lock file
-		if !opts.DryRun {
-			if err := plan.LockFile.Save(plan.LockPath); err != nil {
-				return fmt.Errorf("error saving lock file: %w", err)
-			}
-			fmt.Printf("📝 Lock file updated: %s\n", plan.LockPath)
-
-			// Automatically commit with [skip ci]
-			if opts.Commit {
-				if err := commitLockFile(rootPath, plan.LockPath, deploys); err != nil {
-					fmt.Printf("⚠️  Warning: Failed to commit lock file: %v\n", err)
-				} else {
-					fmt.Println("📤 Lock file committed with [skip ci]")
-				}
-			}
-			fmt.Println()
+		if err := plan.LockFile.Save(plan.LockPath); err != nil {
+			return fmt.Errorf("error saving lock file: %w", err)
 		}
+		fmt.Printf("📝 Lock file updated: %s\n", plan.LockPath)
+
+		// Automatically commit with [skip ci]
+		if opts.Commit {
+			if err := commitLockFile(rootPath, plan.LockPath, deploys); err != nil {
+				fmt.Printf("⚠️  Warning: Failed to commit lock file: %v\n", err)
+			} else {
+				fmt.Println("📤 Lock file committed with [skip ci]")
+			}
+		}
+		fmt.Println()
 
 		fmt.Println("✅ All deployments completed!")
 	}
