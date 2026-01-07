@@ -84,10 +84,10 @@ bear check
 
 ## Viewing Dependencies
 
-Use `bear tree` to visualize:
+Use `bear list --tree` to visualize:
 
 ```bash
-bear tree
+bear list --tree
 ```
 
 ```
@@ -113,5 +113,5 @@ This ensures dependencies are validated before dependents.
 ## See Also
 
 - [Artifacts](../configuration/artifacts.md)
-- [bear tree](../commands/tree.md)
+- [bear list](../commands/list.md)
 - [Change Detection](change-detection.md)

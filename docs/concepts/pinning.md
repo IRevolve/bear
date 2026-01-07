@@ -1,30 +1,30 @@
-# Rollback
+# Pinning
 
-Bear supports rolling back artifacts to previous versions and pinning them to prevent accidental redeploys.
+Bear supports pinning artifacts to specific versions to prevent accidental redeploys or to lock down a known-good version.
 
-## Quick Rollback
+## Pin an Artifact
 
-Roll back an artifact to a specific commit:
+Pin an artifact to a specific commit:
 
 ```bash
-bear apply user-api --rollback=abc1234
+bear apply user-api --pin abc1234
 ```
 
 This will:
 
-1. Check out the artifact at commit `abc1234`
+1. Deploy the artifact at commit `abc1234`
 2. Run validation steps
 3. Run deployment steps
-4. Update lock file with the old commit
+4. Update lock file with that commit
 5. **Pin** the artifact to prevent future deploys
 
 ## What Happens
 
 ```
-Before rollback:
+Before pin:
   user-api @ def5678 (current)
 
-After rollback:
+After pin:
   user-api @ abc1234 (pinned)
 ```
 
@@ -51,21 +51,31 @@ This:
 2. Deploys to the current HEAD
 3. Updates the lock file
 
-## Rollback Without Pin
+## Use Cases
 
-If you want to rollback but not pin (allow immediate redeploy if there are newer changes):
+### Rollback
+
+Pin to a previous known-good version:
 
 ```bash
-# Rollback
-bear apply user-api --rollback=abc1234
+bear apply user-api --pin abc1234
+```
 
-# Immediately force to HEAD
-bear apply user-api --force
+### Lock Production
+
+Keep production stable while developing:
+
+```bash
+# Pin all services to current versions
+bear apply --pin $(git rev-parse HEAD)
+
+# Later, unpin and deploy
+bear apply --force
 ```
 
 ## Finding Commits
 
-To find a commit to rollback to:
+To find a commit to pin to:
 
 ```bash
 # View commit history for an artifact
@@ -84,10 +94,7 @@ In a CI/CD environment:
 ARTIFACT=$1
 COMMIT=$2
 
-bear apply $ARTIFACT --rollback=$COMMIT
-git add bear.lock.yml
-git commit -m "rollback: $ARTIFACT to $COMMIT"
-git push
+bear apply $ARTIFACT --pin $COMMIT --commit
 ```
 
 ## Pin Status in Plan

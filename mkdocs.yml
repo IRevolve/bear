@@ -50,13 +50,12 @@ nav:
       - apply: commands/apply.md
       - list: commands/list.md
       - check: commands/check.md
-      - tree: commands/tree.md
       - preset: commands/preset.md
   - Concepts:
       - Change Detection: concepts/change-detection.md
       - Dependencies: concepts/dependencies.md
       - Lock File: concepts/lock-file.md
-      - Rollback: concepts/rollback.md
+      - Pinning: concepts/pinning.md
       - CI/CD Integration: concepts/ci-cd.md
 
 markdown_extensions:

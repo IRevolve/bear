@@ -9,14 +9,20 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var showTree bool
+
 var listCmd = &cobra.Command{
-	Use:   "list",
+	Use:   "list [artifacts...]",
 	Short: "List all artifacts with their language and configuration",
 	Long: `List all discovered artifacts in the workspace.
 Shows each artifact's name, language, target, and dependencies.
 
+Use --tree to display as a dependency tree.
+
 Examples:
   bear list                # List all artifacts
+  bear list --tree         # Show as dependency tree
+  bear list user-api       # Show specific artifact tree
   bear list -d ./project   # List artifacts in different directory`,
 	RunE: func(c *cobra.Command, args []string) error {
 		// Convert to absolute path
@@ -30,10 +36,14 @@ Examples:
 			return fmt.Errorf("config file not found: %s", configPath)
 		}
 
+		if showTree {
+			return cmd.Tree(configPath, args)
+		}
 		return cmd.List(configPath)
 	},
 }
 
 func init() {
+	listCmd.Flags().BoolVar(&showTree, "tree", false, "Display as dependency tree")
 	rootCmd.AddCommand(listCmd)
 }

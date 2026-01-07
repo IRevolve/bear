@@ -23,8 +23,7 @@ Validates and deploys artifacts that have changes. First runs all validation ste
 | Flag | Description |
 |------|-------------|
 | `-c, --commit` | Commit and push lock file with `[skip ci]` |
-| `--dry-run` | Show what would happen without executing |
-| `--rollback <commit>` | Rollback to a specific commit and pin |
+| `--pin <commit>` | Pin artifact to a specific commit |
 | `-f, --force` | Force operation, ignore pinned artifacts |
 
 ## Examples
@@ -39,11 +38,8 @@ bear apply user-api order-api
 # Apply and auto-commit lock file (for CI/CD)
 bear apply --commit
 
-# Dry run (no execution)
-bear apply --dry-run
-
-# Rollback to a specific commit
-bear apply user-api --rollback=abc1234
+# Pin artifact to a specific commit
+bear apply user-api --pin abc1234
 
 # Force apply a pinned artifact
 bear apply user-api --force
@@ -110,5 +106,5 @@ Proceed with apply? [y/N]: y
 ## See Also
 
 - [bear plan](plan.md)
-- [Rollback](../concepts/rollback.md)
+- [Pinning](../concepts/pinning.md)
 - [Lock File](../concepts/lock-file.md)

@@ -19,12 +19,12 @@ const (
 
 // PlannedAction represents a planned action
 type PlannedAction struct {
-	Artifact       DiscoveredArtifact
-	Action         ActionType
-	Reason         string
-	Steps          []config.Step
-	ChangedFiles   []string
-	RollbackCommit string // If set, this commit will be deployed (rollback)
+	Artifact     DiscoveredArtifact
+	Action       ActionType
+	Reason       string
+	Steps        []config.Step
+	ChangedFiles []string
+	PinCommit    string // If set, this commit will be deployed (pin)
 }
 
 // Plan contains all planned actions
@@ -40,9 +40,9 @@ type Plan struct {
 
 // PlanOptions contains options for plan creation
 type PlanOptions struct {
-	Artifacts      []string // Only consider these artifacts
-	RollbackCommit string   // Rollback to this commit
-	Force          bool     // Ignore pinned artifacts
+	Artifacts []string // Only consider these artifacts
+	PinCommit string   // Pin to this commit
+	Force     bool     // Ignore pinned artifacts
 }
 
 // CreatePlanWithOptions creates a plan with extended options
@@ -65,9 +65,9 @@ func CreatePlanWithOptions(rootPath string, cfg *config.Config, opts PlanOptions
 		artifacts = filterArtifacts(artifacts, opts.Artifacts)
 	}
 
-	// Rollback mode: Deploy all targeted artifacts
-	if opts.RollbackCommit != "" {
-		return createRollbackPlan(artifacts, cfg, lockFile, lockPath, opts.RollbackCommit), nil
+	// Pin mode: Deploy all targeted artifacts to specific commit
+	if opts.PinCommit != "" {
+		return createPinPlan(artifacts, cfg, lockFile, lockPath, opts.PinCommit), nil
 	}
 
 	// Get current commit
@@ -281,14 +281,14 @@ func filterArtifacts(artifacts []DiscoveredArtifact, targets []string) []Discove
 	return filtered
 }
 
-// createRollbackPlan creates a plan for rollback to a specific commit
-func createRollbackPlan(artifacts []DiscoveredArtifact, cfg *config.Config, lockFile *config.LockFile, lockPath string, rollbackCommit string) *Plan {
+// createPinPlan creates a plan for pinning artifacts to a specific commit
+func createPinPlan(artifacts []DiscoveredArtifact, cfg *config.Config, lockFile *config.LockFile, lockPath string, pinCommit string) *Plan {
 	plan := &Plan{
 		LockFile: lockFile,
 		LockPath: lockPath,
 	}
 
-	shortCommit := rollbackCommit
+	shortCommit := pinCommit
 	if len(shortCommit) > 8 {
 		shortCommit = shortCommit[:8]
 	}
@@ -308,11 +308,11 @@ func createRollbackPlan(artifacts []DiscoveredArtifact, cfg *config.Config, lock
 
 		// Validation action
 		plan.Actions = append(plan.Actions, PlannedAction{
-			Artifact:       artifact,
-			Action:         ActionValidate,
-			Reason:         "rollback to " + shortCommit,
-			Steps:          validationSteps,
-			RollbackCommit: rollbackCommit,
+			Artifact:  artifact,
+			Action:    ActionValidate,
+			Reason:    "pin to " + shortCommit,
+			Steps:     validationSteps,
+			PinCommit: pinCommit,
 		})
 		plan.ToValidate++
 
@@ -328,11 +328,11 @@ func createRollbackPlan(artifacts []DiscoveredArtifact, cfg *config.Config, lock
 
 			if len(deploySteps) > 0 {
 				plan.Actions = append(plan.Actions, PlannedAction{
-					Artifact:       artifact,
-					Action:         ActionDeploy,
-					Reason:         "rollback to " + shortCommit,
-					Steps:          deploySteps,
-					RollbackCommit: rollbackCommit,
+					Artifact:  artifact,
+					Action:    ActionDeploy,
+					Reason:    "pin to " + shortCommit,
+					Steps:     deploySteps,
+					PinCommit: pinCommit,
 				})
 				plan.ToDeploy++
 			}

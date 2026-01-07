@@ -10,6 +10,7 @@ import (
 )
 
 var commitLock bool
+var pinCommit string
 
 var applyCmd = &cobra.Command{
 	Use:   "apply [artifacts...]",
@@ -28,7 +29,7 @@ deployed commit hash.
 Examples:
   bear apply                           # Apply all changed artifacts
   bear apply user-api                  # Apply specific artifact
-  bear apply user-api --rollback=abc   # Rollback to commit (pins artifact)
+  bear apply user-api --pin abc123     # Pin artifact to specific commit
   bear apply user-api --force          # Force apply, remove pin
   bear apply --commit                  # Apply and commit lock file with [skip ci]`,
 	RunE: func(c *cobra.Command, args []string) error {
@@ -44,11 +45,10 @@ Examples:
 		}
 
 		opts := cmd.Options{
-			Artifacts:      args, // Positional args are the artifacts
-			RollbackCommit: rollback,
-			DryRun:         dryRun,
-			Force:          force,
-			Commit:         commitLock,
+			Artifacts: args, // Positional args are the artifacts
+			PinCommit: pinCommit,
+			Force:     force,
+			Commit:    commitLock,
 		}
 
 		return cmd.ApplyWithOptions(configPath, opts)
@@ -58,4 +58,5 @@ Examples:
 func init() {
 	rootCmd.AddCommand(applyCmd)
 	applyCmd.Flags().BoolVarP(&commitLock, "commit", "c", false, "Commit and push lock file with [skip ci]")
+	applyCmd.Flags().StringVar(&pinCommit, "pin", "", "Pin artifact(s) to a specific commit")
 }

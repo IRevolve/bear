@@ -1,0 +1,65 @@
+// Bear CI/CD Pipeline for Jenkins (Docker-based)
+// 
+// This pipeline uses the official Bear Docker image for simpler setup.
+// No Go installation required.
+
+pipeline {
+    agent {
+        docker {
+            image 'ghcr.io/irevolve/bear:latest-alpine'
+            args '-v /var/run/docker.sock:/var/run/docker.sock'
+        }
+    }
+
+    options {
+        skipDefaultCheckout(false)
+        timestamps()
+        disableConcurrentBuilds()
+    }
+
+    stages {
+        stage('Check Skip CI') {
+            steps {
+                script {
+                    def commitMsg = sh(script: 'git log -1 --pretty=%B', returnStdout: true).trim()
+                    if (commitMsg.contains('[skip ci]')) {
+                        echo 'Skipping build - lock file update detected'
+                        currentBuild.result = 'NOT_BUILT'
+                        error('Skipping build due to [skip ci] in commit message')
+                    }
+                }
+            }
+        }
+
+        stage('Validate') {
+            steps {
+                // Run validation (lint, test) for changed artifacts
+                sh 'bear plan --validate'
+            }
+        }
+
+        stage('Deploy') {
+            when {
+                branch 'main'
+            }
+            steps {
+                withCredentials([usernamePassword(
+                    credentialsId: 'git-credentials',
+                    usernameVariable: 'GIT_USER',
+                    passwordVariable: 'GIT_TOKEN'
+                )]) {
+                    sh '''
+                        git remote set-url origin https://${GIT_USER}:${GIT_TOKEN}@github.com/your-org/your-repo.git
+                        bear apply --commit
+                    '''
+                }
+            }
+        }
+    }
+
+    post {
+        always {
+            cleanWs()
+        }
+    }
+}

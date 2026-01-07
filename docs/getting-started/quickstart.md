@@ -65,7 +65,7 @@ This verifies:
 See how your artifacts depend on each other:
 
 ```bash
-bear tree
+bear list --tree
 ```
 
 ## 6. Plan Changes
@@ -113,12 +113,6 @@ Execute the plan:
 
 ```bash
 bear apply
-```
-
-Or do a dry run first:
-
-```bash
-bear apply --dry-run
 ```
 
 ## Next Steps
