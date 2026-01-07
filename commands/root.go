@@ -44,7 +44,7 @@ func init() {
 	// Globale Flags
 	rootCmd.PersistentFlags().StringVarP(&workDir, "dir", "d", ".", "Path to project directory")
 	rootCmd.PersistentFlags().BoolVarP(&force, "force", "f", false, "Force operation, ignoring pinned artifacts")
-	
+
 	// Version template
 	rootCmd.SetVersionTemplate(fmt.Sprintf("bear version %s\n", Version))
 }
