@@ -48,7 +48,8 @@ jobs:
           if [ "$GOOS" = "windows" ]; then
             ext=".exe"
           fi
-          go build -o bear-${{ matrix.goos }}-${{ matrix.goarch }}${ext} .
+          VERSION=${GITHUB_REF_NAME#v}
+          go build -ldflags "-X github.com/irevolve/bear/commands.Version=${VERSION}" -o bear-${{ matrix.goos }}-${{ matrix.goarch }}${ext} .
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
