@@ -45,6 +45,21 @@ type PlanOptions struct {
 	Force     bool     // Ignore pinned artifacts
 }
 
+// getValidationSteps returns all validation steps for a given language
+func getValidationSteps(cfg *config.Config, language string) []config.Step {
+	for _, lang := range cfg.Languages {
+		if lang.Name == language {
+			var steps []config.Step
+			steps = append(steps, lang.Validation.Setup...)
+			steps = append(steps, lang.Validation.Lint...)
+			steps = append(steps, lang.Validation.Test...)
+			steps = append(steps, lang.Validation.Build...)
+			return steps
+		}
+	}
+	return nil
+}
+
 // CreatePlanWithOptions creates a plan with extended options
 func CreatePlanWithOptions(rootPath string, cfg *config.Config, opts PlanOptions) (*Plan, error) {
 	// Load lock file
@@ -129,16 +144,7 @@ func CreatePlanWithOptions(rootPath string, cfg *config.Config, opts PlanOptions
 
 		if affected {
 			// Find the validation steps for the language
-			var validationSteps []config.Step
-			for _, lang := range cfg.Languages {
-				if lang.Name == artifact.Language {
-					validationSteps = append(validationSteps, lang.Validation.Setup...)
-					validationSteps = append(validationSteps, lang.Validation.Lint...)
-					validationSteps = append(validationSteps, lang.Validation.Test...)
-					validationSteps = append(validationSteps, lang.Validation.Build...)
-					break
-				}
-			}
+			validationSteps := getValidationSteps(cfg, artifact.Language)
 
 			// Find deploy steps from target (only for non-libraries)
 			var deploySteps []config.Step
@@ -217,16 +223,7 @@ func (p *Plan) addDependentArtifacts(artifacts []DiscoveredArtifact, cfg *config
 				for _, dep := range action.Artifact.Artifact.DependsOn {
 					if changedNames[dep] {
 						// Find validation steps for the language
-						var validationSteps []config.Step
-						for _, lang := range cfg.Languages {
-							if lang.Name == action.Artifact.Language {
-								validationSteps = append(validationSteps, lang.Validation.Setup...)
-								validationSteps = append(validationSteps, lang.Validation.Lint...)
-								validationSteps = append(validationSteps, lang.Validation.Test...)
-								validationSteps = append(validationSteps, lang.Validation.Build...)
-								break
-							}
-						}
+						validationSteps := getValidationSteps(cfg, action.Artifact.Language)
 
 						p.Actions[i].Action = ActionValidate
 						p.Actions[i].Reason = "dependency '" + dep + "' changed"
@@ -295,16 +292,7 @@ func createPinPlan(artifacts []DiscoveredArtifact, cfg *config.Config, lockFile 
 
 	for _, artifact := range artifacts {
 		// Find the validation steps for the language
-		var validationSteps []config.Step
-		for _, lang := range cfg.Languages {
-			if lang.Name == artifact.Language {
-				validationSteps = append(validationSteps, lang.Validation.Setup...)
-				validationSteps = append(validationSteps, lang.Validation.Lint...)
-				validationSteps = append(validationSteps, lang.Validation.Test...)
-				validationSteps = append(validationSteps, lang.Validation.Build...)
-				break
-			}
-		}
+		validationSteps := getValidationSteps(cfg, artifact.Language)
 
 		// Validation action
 		plan.Actions = append(plan.Actions, PlannedAction{
