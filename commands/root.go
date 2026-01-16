@@ -3,6 +3,7 @@ package commands
 import (
 	"fmt"
 
+	"github.com/irevolve/bear/internal"
 	"github.com/spf13/cobra"
 )
 
@@ -10,9 +11,10 @@ import (
 var Version = "dev"
 
 var (
-	// Globale Flags
+	// Global Flags
 	workDir string
 	force   bool
+	verbose bool
 )
 
 var rootCmd = &cobra.Command{
@@ -41,9 +43,17 @@ func Execute() error {
 }
 
 func init() {
-	// Globale Flags
+	// PersistentPreRunE runs before every command
+	rootCmd.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
+		// Setup logger based on verbose flag
+		internal.SetupLogger(verbose)
+		return nil
+	}
+
+	// Global Flags
 	rootCmd.PersistentFlags().StringVarP(&workDir, "dir", "d", ".", "Path to project directory")
 	rootCmd.PersistentFlags().BoolVarP(&force, "force", "f", false, "Force operation, ignoring pinned artifacts")
+	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "Enable verbose debug output")
 
 	// Version template
 	rootCmd.SetVersionTemplate(fmt.Sprintf("bear version %s\n", Version))

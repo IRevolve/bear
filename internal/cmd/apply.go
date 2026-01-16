@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -12,6 +13,9 @@ import (
 )
 
 func ApplyWithOptions(configPath string, opts Options) error {
+	// Create context for cancellation support
+	ctx := context.Background()
+
 	cfg, err := internal.Load(configPath)
 	if err != nil {
 		return fmt.Errorf("error loading config: %w", err)
@@ -79,7 +83,7 @@ func ApplyWithOptions(configPath string, opts Options) error {
 			for _, step := range v.Steps {
 				fmt.Printf("     → %s\n", step.Name)
 
-				if err := executeStep(step, v.Artifact.Path, v.Artifact.Artifact.Params, cfg); err != nil {
+				if err := executeStep(ctx, step, v.Artifact.Path, v.Artifact.Artifact.Params); err != nil {
 					fmt.Printf("     ❌ Failed: %v\n", err)
 					return fmt.Errorf("validation failed for %s: %w", v.Artifact.Artifact.Name, err)
 				}
@@ -107,7 +111,7 @@ func ApplyWithOptions(configPath string, opts Options) error {
 			for _, step := range d.Steps {
 				fmt.Printf("     → %s\n", step.Name)
 
-				if err := executeStep(step, d.Artifact.Path, params, cfg); err != nil {
+				if err := executeStep(ctx, step, d.Artifact.Path, params); err != nil {
 					fmt.Printf("     ❌ Failed: %v\n", err)
 					return fmt.Errorf("deployment failed for %s: %w", d.Artifact.Artifact.Name, err)
 				}
@@ -162,7 +166,7 @@ func ApplyWithOptions(configPath string, opts Options) error {
 	return nil
 }
 
-func executeStep(step config.Step, workDir string, params map[string]string, cfg *config.Config) error {
+func executeStep(ctx context.Context, step config.Step, workDir string, params map[string]string) error {
 	// Replace parameters in the run command
 	command := step.Run
 	for key, value := range params {
@@ -170,13 +174,29 @@ func executeStep(step config.Step, workDir string, params map[string]string, cfg
 		command = strings.ReplaceAll(command, "${"+key+"}", value)
 	}
 
-	// Execute the command
-	cmd := exec.Command("sh", "-c", command)
+	// Detect shell based on OS
+	shell, shellArg := getShell()
+
+	// Execute the command with context for cancellation support
+	cmd := exec.CommandContext(ctx, shell, shellArg, command)
 	cmd.Dir = workDir
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
 	return cmd.Run()
+}
+
+// getShell returns the appropriate shell and argument for the current OS
+func getShell() (string, string) {
+	if isWindows() {
+		return "cmd", "/C"
+	}
+	return "sh", "-c"
+}
+
+// isWindows checks if the current OS is Windows
+func isWindows() bool {
+	return os.PathSeparator == '\\' && os.PathListSeparator == ';'
 }
 
 func mergeParams(cfg *config.Config, targetName string, artifactParams map[string]string) map[string]string {

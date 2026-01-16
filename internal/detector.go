@@ -57,22 +57,35 @@ func GetUncommittedChanges(rootPath string) ([]ChangedFile, error) {
 	// 1. Staged changes
 	cmd := exec.Command("git", "diff", "--name-status", "--cached", "--ignore-space-change", "--ignore-blank-lines")
 	cmd.Dir = rootPath
-	output, _ := cmd.Output()
-	allFiles = append(allFiles, parseGitDiff(string(output))...)
+	output, err := cmd.Output()
+	if err != nil {
+		// Log but continue - partial results are still useful
+		Warn("failed to get staged changes", "error", err)
+	} else {
+		allFiles = append(allFiles, parseGitDiff(string(output))...)
+	}
 
 	// 2. Unstaged changes
 	cmd = exec.Command("git", "diff", "--name-status", "--ignore-space-change", "--ignore-blank-lines")
 	cmd.Dir = rootPath
-	output, _ = cmd.Output()
-	allFiles = append(allFiles, parseGitDiff(string(output))...)
+	output, err = cmd.Output()
+	if err != nil {
+		Warn("failed to get unstaged changes", "error", err)
+	} else {
+		allFiles = append(allFiles, parseGitDiff(string(output))...)
+	}
 
 	// 3. Untracked files
 	cmd = exec.Command("git", "ls-files", "--others", "--exclude-standard")
 	cmd.Dir = rootPath
-	output, _ = cmd.Output()
-	for _, line := range strings.Split(strings.TrimSpace(string(output)), "\n") {
-		if line != "" {
-			allFiles = append(allFiles, ChangedFile{Status: "A", Path: line})
+	output, err = cmd.Output()
+	if err != nil {
+		Warn("failed to get untracked files", "error", err)
+	} else {
+		for _, line := range strings.Split(strings.TrimSpace(string(output)), "\n") {
+			if line != "" {
+				allFiles = append(allFiles, ChangedFile{Status: "A", Path: line})
+			}
 		}
 	}
 
