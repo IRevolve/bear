@@ -1,7 +1,6 @@
 package internal
 
 import (
-	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -125,13 +124,9 @@ func CreatePlanWithOptions(rootPath string, cfg *config.Config, opts PlanOptions
 				}
 			}
 		} else if lastDeployed == "" {
-			// Never deployed - mark as changed if staged/committed
-			cmd := exec.Command("git", "ls-files", relPath)
-			cmd.Dir = rootPath
-			if output, err := cmd.Output(); err == nil && len(output) > 0 {
-				affected = true
-				files = []string{relPath + " (new artifact)"}
-			}
+			// Never deployed - always mark as new artifact
+			affected = true
+			files = []string{relPath + " (new artifact)"}
 		}
 
 		if affected {
