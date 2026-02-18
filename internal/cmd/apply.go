@@ -52,7 +52,7 @@ func ApplyWithOptions(configPath string, opts Options) error {
 	p.BearHeader("Apply")
 
 	// Load lock file for updates
-	lockPath := filepath.Join(rootPath, "bear.lock.toml")
+	lockPath := filepath.Join(rootPath, "bear.lock.yml")
 	lockFile, err := config.LoadLock(lockPath)
 	if err != nil {
 		return fmt.Errorf("error loading lock file: %w", err)

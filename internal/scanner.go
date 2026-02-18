@@ -14,7 +14,7 @@ type DiscoveredArtifact struct {
 	Language string
 }
 
-// ScanArtifacts recursively scans a directory for bear.artifact.toml and bear.lib.toml files
+// ScanArtifacts recursively scans a directory for bear.artifact.yml and bear.lib.yml files
 func ScanArtifacts(rootPath string, cfg *config.Config) ([]DiscoveredArtifact, error) {
 	var artifacts []DiscoveredArtifact
 
@@ -27,8 +27,8 @@ func ScanArtifacts(rootPath string, cfg *config.Config) ([]DiscoveredArtifact, e
 			return nil
 		}
 
-		isLib := d.Name() == "bear.lib.toml"
-		isArtifact := d.Name() == "bear.artifact.toml"
+		isLib := d.Name() == "bear.lib.yml"
+		isArtifact := d.Name() == "bear.artifact.yml"
 
 		if isArtifact {
 			artifact, err := config.LoadArtifact(path)

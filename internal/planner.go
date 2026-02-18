@@ -56,7 +56,7 @@ func getValidationSteps(cfg *config.Config, language string) []config.Step {
 // CreatePlanWithOptions creates a plan with extended options
 func CreatePlanWithOptions(rootPath string, cfg *config.Config, opts PlanOptions) (*Plan, error) {
 	// Load lock file
-	lockPath := filepath.Join(rootPath, "bear.lock.toml")
+	lockPath := filepath.Join(rootPath, "bear.lock.yml")
 	lockFile, err := config.LoadLock(lockPath)
 	if err != nil {
 		return nil, err

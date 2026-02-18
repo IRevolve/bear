@@ -56,6 +56,7 @@ func (m *Manager) GetLanguage(name string) (config.Language, error) {
 	if err := yaml.Unmarshal(data, &lang); err != nil {
 		return config.Language{}, fmt.Errorf("failed to parse language preset %s: %w", name, err)
 	}
+	lang.Name = name
 
 	return lang, nil
 }
@@ -71,6 +72,7 @@ func (m *Manager) GetTarget(name string) (config.Target, error) {
 	if err := yaml.Unmarshal(data, &target); err != nil {
 		return config.Target{}, fmt.Errorf("failed to parse target preset %s: %w", name, err)
 	}
+	target.Name = name
 
 	return target, nil
 }

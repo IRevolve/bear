@@ -3,51 +3,51 @@ package config
 import (
 	"os"
 
-	toml "github.com/pelletier/go-toml/v2"
+	"gopkg.in/yaml.v3"
 )
 
 // Detection defines how a language is detected in a directory
 type Detection struct {
-	Files   []string `toml:"files,omitempty" yaml:"files,omitempty"`   // e.g. ["go.mod", "go.sum"]
-	Pattern string   `toml:"pattern,omitempty" yaml:"pattern,omitempty"` // Glob pattern, e.g. "*.go"
+	Files   []string `yaml:"files,omitempty"`   // e.g. ["go.mod", "go.sum"]
+	Pattern string   `yaml:"pattern,omitempty"` // Glob pattern, e.g. "*.go"
 }
 
 // Step defines a CI step
 type Step struct {
-	Name string `toml:"name" yaml:"name"`
-	Run  string `toml:"run" yaml:"run"`
+	Name string `yaml:"name"`
+	Run  string `yaml:"run"`
 }
 
 // Language defines a language with detection and validation rules
 type Language struct {
-	Name      string            `toml:"-" yaml:"name"`              // Map key (TOML) or field (YAML presets)
-	Detection Detection         `toml:"detection" yaml:"detection"`
-	Vars      map[string]string `toml:"vars,omitempty" yaml:"vars,omitempty"` // Default variables for this language
-	Steps     []Step            `toml:"steps" yaml:"steps"`          // Validation steps (e.g. lint, test, build)
+	Name      string            `yaml:"-"` // Populated from map key
+	Detection Detection         `yaml:"detection"`
+	Vars      map[string]string `yaml:"vars,omitempty"` // Default variables for this language
+	Steps     []Step            `yaml:"steps"`          // Validation steps (e.g. lint, test, build)
 }
 
 // Target defines a reusable deployment template
 type Target struct {
-	Name  string            `toml:"-" yaml:"name"`               // Map key (TOML) or field (YAML presets)
-	Vars  map[string]string `toml:"vars,omitempty" yaml:"vars,omitempty"` // Default variables for this target
-	Steps []Step            `toml:"steps" yaml:"steps"`          // Deployment steps (with $VAR placeholders)
+	Name  string            `yaml:"-"`              // Populated from map key
+	Vars  map[string]string `yaml:"vars,omitempty"` // Default variables for this target
+	Steps []Step            `yaml:"steps"`          // Deployment steps (with $VAR placeholders)
 }
 
 // UseConfig defines which presets to import
 type UseConfig struct {
-	Languages []string `toml:"languages,omitempty"` // e.g. ["go", "node", "python"]
-	Targets   []string `toml:"targets,omitempty"`   // e.g. ["docker", "cloudrun", "lambda"]
+	Languages []string `yaml:"languages,omitempty"` // e.g. ["go", "node", "python"]
+	Targets   []string `yaml:"targets,omitempty"`   // e.g. ["docker", "cloudrun", "lambda"]
 }
 
-// Config is the main configuration (bear.config.toml)
+// Config is the main configuration (bear.config.yml)
 type Config struct {
-	Name      string                `toml:"name"`
-	Use       UseConfig             `toml:"use,omitempty"` // Import predefined presets
-	Languages map[string]Language   `toml:"languages"`
-	Targets   map[string]Target     `toml:"targets,omitempty"`
+	Name      string              `yaml:"name"`
+	Use       UseConfig           `yaml:"use,omitempty"` // Import predefined presets
+	Languages map[string]Language `yaml:"languages"`
+	Targets   map[string]Target   `yaml:"targets,omitempty"`
 }
 
-// Load loads a bear.config.toml file
+// Load loads a bear.config.yml file
 func Load(path string) (*Config, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -55,7 +55,7 @@ func Load(path string) (*Config, error) {
 	}
 
 	var cfg Config
-	if err := toml.Unmarshal(data, &cfg); err != nil {
+	if err := yaml.Unmarshal(data, &cfg); err != nil {
 		return nil, err
 	}
 

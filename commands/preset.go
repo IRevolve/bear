@@ -51,7 +51,7 @@ var presetListCmd = &cobra.Command{
 		}
 
 		fmt.Println()
-		fmt.Println("Usage in bear.config.toml:")
+		fmt.Println("Usage in bear.config.yml:")
 		fmt.Println("  [use]")
 		fmt.Println("  languages = [\"go\", \"node\"]")
 		fmt.Println("  targets = [\"docker\", \"cloudrun\"]")

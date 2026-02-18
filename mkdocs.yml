@@ -34,29 +34,11 @@ theme:
 
 nav:
   - Home: index.md
-  - Getting Started:
-      - Installation: getting-started/installation.md
-      - Quick Start: getting-started/quickstart.md
-  - Configuration:
-      - Project Config: configuration/project.md
-      - Artifacts: configuration/artifacts.md
-      - Languages: configuration/languages.md
-      - Targets: configuration/targets.md
-      - Presets: configuration/presets.md
-  - Commands:
-      - Overview: commands/index.md
-      - init: commands/init.md
-      - plan: commands/plan.md
-      - apply: commands/apply.md
-      - list: commands/list.md
-      - check: commands/check.md
-      - preset: commands/preset.md
-  - Concepts:
-      - Change Detection: concepts/change-detection.md
-      - Dependencies: concepts/dependencies.md
-      - Lock File: concepts/lock-file.md
-      - Pinning: concepts/pinning.md
-      - CI/CD Integration: concepts/ci-cd.md
+  - Getting Started: getting-started.md
+  - Configuration: configuration.md
+  - CI/CD: ci-cd.md
+  - Commands: commands.md
+  - Concepts: concepts.md
 
 markdown_extensions:
   - admonition

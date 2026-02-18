@@ -15,24 +15,31 @@ func TestLoad(t *testing.T) {
 	defer os.RemoveAll(tmpDir)
 
 	// Write test config
-	configContent := `name = "test-project"
+	configContent := `name: test-project
 
-[languages.go]
-detection = { files = ["go.mod"] }
-steps = [
-  { name = "Download", run = "go mod download" },
-  { name = "Vet", run = "go vet ./..." },
-  { name = "Test", run = "go test ./..." },
-  { name = "Build", run = "go build ." },
-]
+languages:
+  go:
+    detection:
+      files: [go.mod]
+    steps:
+      - name: Download
+        run: go mod download
+      - name: Vet
+        run: go vet ./...
+      - name: Test
+        run: go test ./...
+      - name: Build
+        run: go build .
 
-[targets.docker]
-vars = { REGISTRY = "ghcr.io" }
-steps = [
-  { name = "Build", run = "docker build ." },
-]
+targets:
+  docker:
+    vars:
+      REGISTRY: ghcr.io
+    steps:
+      - name: Build
+        run: docker build .
 `
-	configPath := filepath.Join(tmpDir, "bear.config.toml")
+	configPath := filepath.Join(tmpDir, "bear.config.yml")
 	if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
 		t.Fatalf("failed to write config: %v", err)
 	}
@@ -76,27 +83,27 @@ steps = [
 }
 
 func TestLoad_FileNotFound(t *testing.T) {
-	_, err := Load("/nonexistent/path/bear.config.toml")
+	_, err := Load("/nonexistent/path/bear.config.yml")
 	if err == nil {
 		t.Error("expected error for non-existent file")
 	}
 }
 
-func TestLoad_InvalidTOML(t *testing.T) {
+func TestLoad_InvalidYAML(t *testing.T) {
 	tmpDir, err := os.MkdirTemp("", "bear-test-*")
 	if err != nil {
 		t.Fatalf("failed to create temp dir: %v", err)
 	}
 	defer os.RemoveAll(tmpDir)
 
-	// Write invalid TOML
-	configPath := filepath.Join(tmpDir, "bear.config.toml")
-	if err := os.WriteFile(configPath, []byte("invalid = [broken"), 0644); err != nil {
+	// Write invalid YAML
+	configPath := filepath.Join(tmpDir, "bear.config.yml")
+	if err := os.WriteFile(configPath, []byte("invalid: [broken"), 0644); err != nil {
 		t.Fatalf("failed to write config: %v", err)
 	}
 
 	_, err = Load(configPath)
 	if err == nil {
-		t.Error("expected error for invalid TOML")
+		t.Error("expected error for invalid YAML")
 	}
 }

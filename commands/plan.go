@@ -18,10 +18,10 @@ var planCmd = &cobra.Command{
 	Use:   "plan [artifacts...]",
 	Short: "Detect changes, validate artifacts, and show the deployment plan",
 	Long: `Detects changed artifacts, runs validation steps in parallel,
-and writes a validated deployment plan to .bear/plan.toml.
+and writes a validated deployment plan to .bear/plan.yml.
 
 The plan compares each artifact against its last deployed commit
-(from bear.lock.toml) and validates all changed artifacts before
+(from bear.lock.yml) and validates all changed artifacts before
 showing what would be deployed.
 
 If validation fails, no plan file is written and the command exits with code 1.
@@ -42,7 +42,7 @@ Examples:
 			return fmt.Errorf("invalid path: %w", err)
 		}
 
-		configPath := filepath.Join(absDir, "bear.config.toml")
+		configPath := filepath.Join(absDir, "bear.config.yml")
 		if _, err := os.Stat(configPath); os.IsNotExist(err) {
 			return fmt.Errorf("config file not found: %s", configPath)
 		}

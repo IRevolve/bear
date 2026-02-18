@@ -3,16 +3,16 @@ package config
 import (
 	"os"
 
-	toml "github.com/pelletier/go-toml/v2"
+	"gopkg.in/yaml.v3"
 )
 
-// Library defines a shared library (bear.lib.toml)
+// Library defines a shared library (bear.lib.yml)
 type Library struct {
-	Name    string   `toml:"name"`
-	Depends []string `toml:"depends,omitempty"` // Dependencies to other artifacts/libraries
+	Name    string   `yaml:"name"`
+	Depends []string `yaml:"depends,omitempty"` // Dependencies to other artifacts/libraries
 }
 
-// LoadLibrary loads a bear.lib.toml file
+// LoadLibrary loads a bear.lib.yml file
 func LoadLibrary(path string) (*Library, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -20,7 +20,7 @@ func LoadLibrary(path string) (*Library, error) {
 	}
 
 	var lib Library
-	if err := toml.Unmarshal(data, &lib); err != nil {
+	if err := yaml.Unmarshal(data, &lib); err != nil {
 		return nil, err
 	}
 

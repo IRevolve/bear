@@ -1,3 +1,0 @@
-name = "github-webhook"
-target = "lambda"
-depends = ["shared-go"]
