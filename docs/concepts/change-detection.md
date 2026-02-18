@@ -6,17 +6,9 @@ Bear uses Git to detect changes in your monorepo. Unlike traditional CI systems 
 
 For each artifact, Bear compares against its **last deployed commit** (stored in `bear.lock.yml`):
 
-```
-┌─────────────────────┐
-│  Last Deployed      │
-│  (from lock file)   │
-└─────────┬───────────┘
-          │
-          ▼ Compare
-┌─────────────────────┐
-│  Current State      │
-│  (HEAD + uncommitted)│
-└─────────────────────┘
+```mermaid
+flowchart TB
+    A["Last Deployed\n(from lock file)"] -->|Compare| B["Current State\n(HEAD + uncommitted)"]
 ```
 
 ## What Triggers a Rebuild
@@ -54,12 +46,12 @@ Artifacts that have never been deployed (no entry in lock file).
 
 If a library changes, all artifacts that depend on it are marked for rebuild:
 
-```
-shared-lib (changed)
-    ↓
-user-api (dependency changed) → rebuild
-    ↓
-dashboard (dependency changed) → rebuild
+```mermaid
+flowchart TB
+    A[shared-lib changed] --> B[user-api]
+    A --> C[dashboard]
+    B -->|rebuild| B
+    C -->|rebuild| C
 ```
 
 ## Per-Artifact State

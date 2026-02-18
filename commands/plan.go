@@ -9,25 +9,32 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var validate bool
+var (
+	planConcurrency int
+	planPinCommit   string
+)
 
 var planCmd = &cobra.Command{
 	Use:   "plan [artifacts...]",
-	Short: "Show what would be validated/deployed based on changes",
-	Long: `Creates an execution plan showing which artifacts have changed
-and what actions would be taken (validate, deploy, skip).
+	Short: "Detect changes, validate artifacts, and show the deployment plan",
+	Long: `Detects changed artifacts, runs validation (lint, test, build) in parallel,
+and writes a validated deployment plan to .bear/plan.yml.
 
 The plan compares each artifact against its last deployed commit
-(from bear.lock.yml) to determine what needs to be built and deployed.
+(from bear.lock.yml) and validates all changed artifacts before
+showing what would be deployed.
 
-Use --validate to also run validation commands (lint, test) for changed artifacts.
+If validation fails, no plan file is written and the command exits with code 1.
+
+After a successful plan, run 'bear apply' to execute the deployments.
 
 Examples:
-  bear plan                      # Plan all changed artifacts
-  bear plan user-api             # Plan specific artifact
-  bear plan user-api order-api   # Plan multiple artifacts
-  bear plan --validate           # Plan and run validation
-  bear plan -d ./other-project   # Plan in different directory`,
+  bear plan                        # Plan all changed artifacts
+  bear plan user-api               # Plan specific artifact
+  bear plan user-api order-api     # Plan multiple artifacts
+  bear plan --pin abc123           # Pin artifact(s) to specific commit
+  bear plan --concurrency 5        # Limit parallel validations
+  bear plan -d ./other-project     # Plan in different directory`,
 	RunE: func(c *cobra.Command, args []string) error {
 		// Convert to absolute path
 		absDir, err := filepath.Abs(workDir)
@@ -41,9 +48,11 @@ Examples:
 		}
 
 		opts := cmd.Options{
-			Artifacts: args, // Positional args are the artifacts
-			Validate:  validate,
-			Force:     force,
+			Artifacts:   args,
+			PinCommit:   planPinCommit,
+			Force:       force,
+			Concurrency: planConcurrency,
+			Verbose:     verbose,
 		}
 
 		return cmd.PlanWithOptions(configPath, opts)
@@ -51,6 +60,7 @@ Examples:
 }
 
 func init() {
-	planCmd.Flags().BoolVar(&validate, "validate", false, "Run validation commands (lint, test) for changed artifacts")
+	planCmd.Flags().IntVar(&planConcurrency, "concurrency", 10, "Maximum number of parallel validation jobs")
+	planCmd.Flags().StringVar(&planPinCommit, "pin", "", "Pin artifact(s) to a specific commit")
 	rootCmd.AddCommand(planCmd)
 }

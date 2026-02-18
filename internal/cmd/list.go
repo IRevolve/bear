@@ -10,6 +10,8 @@ import (
 )
 
 func List(configPath string) error {
+	p := NewPrinter()
+
 	cfg, err := internal.Load(configPath)
 	if err != nil {
 		return fmt.Errorf("error loading config: %w", err)
@@ -27,39 +29,39 @@ func List(configPath string) error {
 	}
 
 	if len(artifacts) == 0 {
-		fmt.Println("No artifacts found.")
+		p.Println("No artifacts found.")
 		return nil
 	}
 
-	fmt.Printf("Found %d artifact(s) in %s:\n\n", len(artifacts), cfg.Name)
+	p.BearHeader(fmt.Sprintf("List (%d artifacts in %s)", len(artifacts), cfg.Name))
 
 	for _, a := range artifacts {
 		relPath, _ := filepath.Rel(rootPath, a.Path)
 
 		if a.Artifact.IsLib {
-			fmt.Printf("📚 %s (library)\n", a.Artifact.Name)
+			p.Printf("  %s %s\n", p.dim("lib"), p.bold(a.Artifact.Name))
 		} else {
-			fmt.Printf("📦 %s\n", a.Artifact.Name)
+			p.Printf("  %s %s\n", p.cyan("svc"), p.bold(a.Artifact.Name))
 		}
-		fmt.Printf("   Path:     %s\n", relPath)
-		fmt.Printf("   Language: %s\n", a.Language)
+		p.Detail("Path:    ", relPath)
+		p.Detail("Language:", a.Language)
 
 		if !a.Artifact.IsLib {
-			fmt.Printf("   Target:   %s\n", a.Artifact.Target)
+			p.Detail("Target:  ", a.Artifact.Target)
 		}
 
 		if len(a.Artifact.Params) > 0 {
-			fmt.Printf("   Params:\n")
+			p.Detail("Params:  ", "")
 			for k, v := range a.Artifact.Params {
-				fmt.Printf("     %s: %s\n", k, v)
+				p.Printf("               %s\n", p.dim(fmt.Sprintf("%s: %s", k, v)))
 			}
 		}
 
 		if len(a.Artifact.DependsOn) > 0 {
-			fmt.Printf("   Depends:  %s\n", strings.Join(a.Artifact.DependsOn, ", "))
+			p.Detail("Depends: ", strings.Join(a.Artifact.DependsOn, ", "))
 		}
 
-		fmt.Println()
+		p.Blank()
 	}
 
 	return nil

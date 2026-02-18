@@ -88,12 +88,30 @@ Examples:
 			return fmt.Errorf("failed to write config: %w", err)
 		}
 
-		fmt.Printf("🐻 Created %s\n\n", configPath)
+		// Add .bear/ to .gitignore if it exists
+		gitignorePath := filepath.Join(absDir, ".gitignore")
+		if _, err := os.Stat(gitignorePath); err == nil {
+			data, err := os.ReadFile(gitignorePath)
+			if err == nil && !strings.Contains(string(data), ".bear/") {
+				f, err := os.OpenFile(gitignorePath, os.O_APPEND|os.O_WRONLY, 0644)
+				if err == nil {
+					defer f.Close()
+					content := string(data)
+					if len(content) > 0 && content[len(content)-1] != '\n' {
+						f.WriteString("\n")
+					}
+					f.WriteString(".bear/\n")
+				}
+			}
+		}
+
+		fmt.Printf("Created %s\n\n", configPath)
 		fmt.Println("Next steps:")
 		fmt.Println("  1. Add bear.artifact.yml to your services/apps")
 		fmt.Println("  2. Add bear.lib.yml to your libraries")
 		fmt.Println("  3. Run 'bear check' to validate your setup")
-		fmt.Println("  4. Run 'bear plan' to see what would be built")
+		fmt.Println("  4. Run 'bear plan' to validate and plan deployments")
+		fmt.Println("  5. Run 'bear apply' to execute the plan")
 
 		return nil
 	},

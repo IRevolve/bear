@@ -58,12 +58,12 @@ my-monorepo/
 
 Dependency graph:
 
-```
-shared-lib
-├── auth-lib
-│   └── api
-├── api
-└── worker
+```mermaid
+flowchart TB
+    shared-lib --> auth-lib
+    shared-lib --> api
+    shared-lib --> worker
+    auth-lib --> api
 ```
 
 If `shared-lib` changes:
@@ -78,8 +78,8 @@ Bear detects and rejects circular dependencies:
 ```bash
 bear check
 
-❌ Errors:
-   • Circular dependency: api → lib → api
+  Errors:
+    Circular dependency: api → lib → api
 ```
 
 ## Viewing Dependencies

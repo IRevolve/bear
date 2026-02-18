@@ -33,7 +33,7 @@ artifacts:
 
 1. **Plan** — Bear compares each artifact against its lock file entry
 2. **Apply** — After successful deploy, lock file is updated
-3. **Rollback** — Lock file is updated with old commit + pinned flag
+3. **Pinning** — Lock file is updated with the pinned commit + pinned flag
 
 ## Automatic Management
 
@@ -41,14 +41,15 @@ The lock file is automatically managed by Bear:
 
 - Created on first `bear apply`
 - Updated after each successful deployment
+- Auto-committed with `[skip ci]` (disable with `--no-commit`)
 - Should be committed to Git
 
 !!! tip "Commit the Lock File"
-    Always commit `bear.lock.yml` to your repository. This ensures consistent state across CI/CD runs and team members.
+    Always commit `bear.lock.yml` to your repository. Bear auto-commits it by default after `bear apply`.
 
 ## Pinning
 
-When an artifact is pinned, it's skipped during `bear apply`:
+When an artifact is pinned, it's skipped during `bear plan`:
 
 ```yaml
 user-api:
@@ -58,12 +59,13 @@ user-api:
 
 Artifacts get pinned when:
 
-- You rollback: `bear apply user-api --rollback=abc1234`
+- You pin during plan: `bear plan user-api --pin abc1234`
 
-To unpin and force apply:
+To unpin and force plan:
 
 ```bash
-bear apply user-api --force
+bear plan user-api --force
+bear apply
 ```
 
 ## Clean State
@@ -88,16 +90,12 @@ In CI/CD, the lock file determines what gets rebuilt:
   
 - name: Apply
   run: bear apply
-  
-- name: Commit lock file
-  run: |
-    git add bear.lock.yml
-    git commit -m "chore: update bear.lock.yml" || true
-    git push
 ```
+
+Bear auto-commits the lock file with `[skip ci]` after `bear apply`. Use `--no-commit` to handle it yourself.
 
 ## See Also
 
 - [Change Detection](change-detection.md)
-- [Rollback](rollback.md)
+- [Pinning](pinning.md)
 - [bear apply](../commands/apply.md)
