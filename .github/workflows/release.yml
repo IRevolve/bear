@@ -60,6 +60,8 @@ jobs:
   release:
     needs: build
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - name: Check if pre-release
         id: prerelease
@@ -78,9 +80,8 @@ jobs:
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
+          token: ${{ secrets.GITHUB_TOKEN }}
           files: artifacts/*
           generate_release_notes: true
           prerelease: ${{ steps.prerelease.outputs.is_prerelease }}
