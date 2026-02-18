@@ -31,7 +31,7 @@ Examples:
 			return fmt.Errorf("invalid path: %w", err)
 		}
 
-		configPath := filepath.Join(absDir, "bear.config.toml")
+		configPath := filepath.Join(absDir, "bear.config.yml")
 		if _, err := os.Stat(configPath); os.IsNotExist(err) {
 			return fmt.Errorf("config file not found: %s", configPath)
 		}

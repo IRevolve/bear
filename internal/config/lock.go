@@ -4,24 +4,24 @@ import (
 	"os"
 	"time"
 
-	toml "github.com/pelletier/go-toml/v2"
+	"gopkg.in/yaml.v3"
 )
 
 // LockEntry contains the deployment status of an artifact
 type LockEntry struct {
-	Commit    string `toml:"commit"`            // Last successfully deployed commit
-	Timestamp string `toml:"timestamp"`         // Time of deployment
-	Version   string `toml:"version,omitempty"` // Optional version
-	Target    string `toml:"target"`            // Used target template
-	Pinned    bool   `toml:"pinned,omitempty"`  // If true, this artifact is not automatically updated
+	Commit    string `yaml:"commit"`            // Last successfully deployed commit
+	Timestamp string `yaml:"timestamp"`         // Time of deployment
+	Version   string `yaml:"version,omitempty"` // Optional version
+	Target    string `yaml:"target"`            // Used target template
+	Pinned    bool   `yaml:"pinned,omitempty"`  // If true, this artifact is not automatically updated
 }
 
 // LockFile contains the deployment status of all artifacts
 type LockFile struct {
-	Artifacts map[string]LockEntry `toml:"artifacts"`
+	Artifacts map[string]LockEntry `yaml:"artifacts"`
 }
 
-// LoadLock loads the bear.lock.toml file
+// LoadLock loads the bear.lock.yml file
 func LoadLock(path string) (*LockFile, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -33,7 +33,7 @@ func LoadLock(path string) (*LockFile, error) {
 	}
 
 	var lock LockFile
-	if err := toml.Unmarshal(data, &lock); err != nil {
+	if err := yaml.Unmarshal(data, &lock); err != nil {
 		return nil, err
 	}
 
@@ -46,7 +46,7 @@ func LoadLock(path string) (*LockFile, error) {
 
 // Save saves the lock file
 func (l *LockFile) Save(path string) error {
-	data, err := toml.Marshal(l)
+	data, err := yaml.Marshal(l)
 	if err != nil {
 		return err
 	}

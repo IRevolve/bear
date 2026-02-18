@@ -5,40 +5,40 @@ import (
 	"path/filepath"
 	"time"
 
-	toml "github.com/pelletier/go-toml/v2"
+	"gopkg.in/yaml.v3"
 )
 
 // PlanArtifact represents a single artifact in the plan file
 type PlanArtifact struct {
-	Name         string            `toml:"name"`
-	Path         string            `toml:"path"`
-	Language     string            `toml:"language"`
-	Target       string            `toml:"target,omitempty"`
-	Action       string            `toml:"action"` // "deploy" or "skip"
-	Reason       string            `toml:"reason"`
-	ChangedFiles []string          `toml:"changed_files,omitempty"`
-	Vars         map[string]string `toml:"vars,omitempty"`
-	Steps        []Step            `toml:"steps,omitempty"` // Deploy steps only (validation already ran)
-	Pinned       bool              `toml:"pinned,omitempty"`
-	PinCommit    string            `toml:"pin_commit,omitempty"`
-	IsLib        bool              `toml:"is_lib,omitempty"`
+	Name         string            `yaml:"name"`
+	Path         string            `yaml:"path"`
+	Language     string            `yaml:"language"`
+	Target       string            `yaml:"target,omitempty"`
+	Action       string            `yaml:"action"` // "deploy" or "skip"
+	Reason       string            `yaml:"reason"`
+	ChangedFiles []string          `yaml:"changed_files,omitempty"`
+	Vars         map[string]string `yaml:"vars,omitempty"`
+	Steps        []Step            `yaml:"steps,omitempty"` // Deploy steps only (validation already ran)
+	Pinned       bool              `yaml:"pinned,omitempty"`
+	PinCommit    string            `yaml:"pin_commit,omitempty"`
+	IsLib        bool              `yaml:"is_lib,omitempty"`
 }
 
 // PlanSkipped represents a skipped artifact
 type PlanSkipped struct {
-	Name   string `toml:"name"`
-	Reason string `toml:"reason"`
+	Name   string `yaml:"name"`
+	Reason string `yaml:"reason"`
 }
 
-// PlanFile is the serializable plan written to .bear/plan.toml
+// PlanFile is the serializable plan written to .bear/plan.yml
 type PlanFile struct {
-	CreatedAt  string         `toml:"created_at"`
-	Commit     string         `toml:"commit"`
-	Artifacts  []PlanArtifact `toml:"artifacts"`
-	Skipped    []PlanSkipped  `toml:"skipped,omitempty"`
-	Validated  int            `toml:"validated"`
-	ToDeploy   int            `toml:"to_deploy"`
-	TotalSkips int            `toml:"total_skipped"`
+	CreatedAt  string         `yaml:"created_at"`
+	Commit     string         `yaml:"commit"`
+	Artifacts  []PlanArtifact `yaml:"artifacts"`
+	Skipped    []PlanSkipped  `yaml:"skipped,omitempty"`
+	Validated  int            `yaml:"validated"`
+	ToDeploy   int            `yaml:"to_deploy"`
+	TotalSkips int            `yaml:"total_skipped"`
 }
 
 // NewPlanFile creates a new PlanFile with current timestamp
@@ -54,19 +54,19 @@ func BearDir(rootPath string) string {
 	return filepath.Join(rootPath, ".bear")
 }
 
-// PlanFilePath returns the path to .bear/plan.toml
+// PlanFilePath returns the path to .bear/plan.yml
 func PlanFilePath(rootPath string) string {
-	return filepath.Join(BearDir(rootPath), "plan.toml")
+	return filepath.Join(BearDir(rootPath), "plan.yml")
 }
 
-// WritePlan writes the plan file to .bear/plan.toml
+// WritePlan writes the plan file to .bear/plan.yml
 func WritePlan(rootPath string, plan *PlanFile) error {
 	dir := BearDir(rootPath)
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return err
 	}
 
-	data, err := toml.Marshal(plan)
+	data, err := yaml.Marshal(plan)
 	if err != nil {
 		return err
 	}
@@ -74,7 +74,7 @@ func WritePlan(rootPath string, plan *PlanFile) error {
 	return os.WriteFile(PlanFilePath(rootPath), data, 0644)
 }
 
-// ReadPlan reads the plan file from .bear/plan.toml
+// ReadPlan reads the plan file from .bear/plan.yml
 func ReadPlan(rootPath string) (*PlanFile, error) {
 	data, err := os.ReadFile(PlanFilePath(rootPath))
 	if err != nil {
@@ -82,7 +82,7 @@ func ReadPlan(rootPath string) (*PlanFile, error) {
 	}
 
 	var plan PlanFile
-	if err := toml.Unmarshal(data, &plan); err != nil {
+	if err := yaml.Unmarshal(data, &plan); err != nil {
 		return nil, err
 	}
 

@@ -30,7 +30,7 @@ func Tree(configPath string, filterArtifacts []string) error {
 	}
 
 	// Load lock file for status info
-	lockPath := filepath.Join(rootPath, "bear.lock.toml")
+	lockPath := filepath.Join(rootPath, "bear.lock.yml")
 	lockFile, _ := config.LoadLock(lockPath)
 
 	// Build artifact map

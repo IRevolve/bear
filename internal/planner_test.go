@@ -148,8 +148,8 @@ func TestIsArtifactAffected(t *testing.T) {
 			changedFiles: []ChangedFile{
 				{Path: "services/api/main.go"},
 			},
-			expectHit:    true,
-			expectCount:  1,
+			expectHit:   true,
+			expectCount: 1,
 		},
 		{
 			name:         "nested file change",
@@ -157,8 +157,8 @@ func TestIsArtifactAffected(t *testing.T) {
 			changedFiles: []ChangedFile{
 				{Path: "services/api/handlers/user.go"},
 			},
-			expectHit:    true,
-			expectCount:  1,
+			expectHit:   true,
+			expectCount: 1,
 		},
 		{
 			name:         "unrelated change",
@@ -166,8 +166,8 @@ func TestIsArtifactAffected(t *testing.T) {
 			changedFiles: []ChangedFile{
 				{Path: "services/web/main.go"},
 			},
-			expectHit:    false,
-			expectCount:  0,
+			expectHit:   false,
+			expectCount: 0,
 		},
 		{
 			name:         "multiple changes mixed",
@@ -177,8 +177,8 @@ func TestIsArtifactAffected(t *testing.T) {
 				{Path: "services/api/handlers/user.go"},
 				{Path: "services/web/main.go"},
 			},
-			expectHit:    true,
-			expectCount:  2,
+			expectHit:   true,
+			expectCount: 2,
 		},
 	}
 

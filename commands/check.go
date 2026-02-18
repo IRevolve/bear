@@ -14,7 +14,7 @@ var checkCmd = &cobra.Command{
 	Short: "Validate configuration and dependencies",
 	Long: `Validates the Bear configuration and checks for issues:
 
-- Config syntax (bear.config.toml, bear.artifact.toml, bear.lib.toml)
+- Config syntax (bear.config.yml, bear.artifact.yml, bear.lib.yml)
 - All dependencies exist and can be resolved
 - No circular dependencies
 - All referenced targets exist
@@ -30,7 +30,7 @@ Examples:
 			return fmt.Errorf("invalid path: %w", err)
 		}
 
-		configPath := filepath.Join(absDir, "bear.config.toml")
+		configPath := filepath.Join(absDir, "bear.config.yml")
 		if _, err := os.Stat(configPath); os.IsNotExist(err) {
 			return fmt.Errorf("config file not found: %s", configPath)
 		}

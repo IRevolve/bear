@@ -75,7 +75,7 @@ func ExecuteStep(ctx context.Context, stepRun string, workDir string, vars map[s
 	sort.Slice(keys, func(i, j int) bool { return len(keys[i]) > len(keys[j]) })
 	for _, key := range keys {
 		value := vars[key]
-		command = strings.ReplaceAll(command, "${" +key+"}", value)
+		command = strings.ReplaceAll(command, "${"+key+"}", value)
 		command = strings.ReplaceAll(command, "$"+key, value)
 	}
 
