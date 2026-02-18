@@ -3,19 +3,19 @@ package config
 import (
 	"os"
 
-	"gopkg.in/yaml.v3"
+	toml "github.com/pelletier/go-toml/v2"
 )
 
-// Artifact defines a single deployable artifact (bear.artifact.yml)
+// Artifact defines a single deployable artifact (bear.artifact.toml)
 type Artifact struct {
-	Name      string            `yaml:"name"`
-	Target    string            `yaml:"target"`               // Reference to TargetTemplate
-	Params    map[string]string `yaml:"params,omitempty"`     // Parameters for the target
-	DependsOn []string          `yaml:"depends_on,omitempty"` // Dependencies to other artifacts
-	IsLib     bool              `yaml:"-"`                    // Set by scanner for libraries
+	Name    string            `toml:"name"`
+	Target  string            `toml:"target"`            // Reference to Target
+	Vars    map[string]string `toml:"vars,omitempty"`    // Variables for the target
+	Depends []string          `toml:"depends,omitempty"` // Dependencies to other artifacts
+	IsLib   bool              `toml:"-"`                 // Set by scanner for libraries
 }
 
-// LoadArtifact loads a bear.artifact.yml file
+// LoadArtifact loads a bear.artifact.toml file
 func LoadArtifact(path string) (*Artifact, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -23,7 +23,7 @@ func LoadArtifact(path string) (*Artifact, error) {
 	}
 
 	var artifact Artifact
-	if err := yaml.Unmarshal(data, &artifact); err != nil {
+	if err := toml.Unmarshal(data, &artifact); err != nil {
 		return nil, err
 	}
 

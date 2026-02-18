@@ -4,14 +4,14 @@ Bear loads community presets from [bear-presets](https://github.com/irevolve/bea
 
 ## Using Presets
 
-Add the `use` section to your `bear.config.yml`:
+Add the `use` section to your `bear.config.toml`:
 
-```yaml
-name: my-project
+```toml
+name = "my-project"
 
-use:
-  languages: [go, node, python]
-  targets: [docker, cloudrun, kubernetes]
+[use]
+languages = ["go", "node", "python"]
+targets = ["docker", "cloudrun", "kubernetes"]
 ```
 
 ## Available Languages
@@ -91,14 +91,14 @@ Presets are cached in `~/.bear/presets/`:
 
 ```
 ~/.bear/presets/
-├── index.yml
+├── index.toml
 ├── languages/
-│   ├── go.yml
-│   ├── node.yml
+│   ├── go.toml
+│   ├── node.toml
 │   └── ...
 └── targets/
-    ├── docker.yml
-    ├── cloudrun.yml
+    ├── docker.toml
+    ├── cloudrun.toml
     └── ...
 ```
 
@@ -106,22 +106,19 @@ Presets are cached in `~/.bear/presets/`:
 
 You can override presets by defining the same language/target in your config:
 
-```yaml
-name: my-project
+```toml
+name = "my-project"
 
-use:
-  languages: [go]
-  targets: [docker]
+[use]
+languages = ["go"]
+targets = ["docker"]
 
 # Override the go preset with custom steps
-languages:
-  - name: go
-    detection:
-      files: [go.mod]
-    validation:
-      test:
-        - name: Test with coverage
-          run: go test -cover -race ./...
+[languages.go]
+detection = { files = ["go.mod"] }
+steps = [
+  { name = "Test with coverage", run = "go test -cover -race ./..." },
+]
 ```
 
 ## Contributing Presets

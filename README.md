@@ -38,19 +38,19 @@ go build -o bear .
 bear init
 ```
 
-This creates `bear.config.yml` with auto-detected languages.
+This creates `bear.config.toml` with auto-detected languages.
 
 ### 2. Use presets (recommended)
 
 Instead of defining languages and targets manually, use community presets:
 
-```yaml
-# bear.config.yml
-name: my-platform
+```toml
+# bear.config.toml
+name = "my-platform"
 
-use:
-  languages: [go, node]
-  targets: [docker, cloudrun]
+[use]
+languages = ["go", "node"]
+targets = ["docker", "cloudrun"]
 ```
 
 View available presets:
@@ -64,60 +64,46 @@ bear preset update            # Refresh preset cache from GitHub
 
 ### 3. Or define custom languages/targets
 
-```yaml
-# bear.config.yml
-name: my-platform
+```toml
+# bear.config.toml
+name = "my-platform"
 
-languages:
-  - name: go
-    detection:
-      files: [go.mod]
-    validation:
-      setup:
-        - name: Download modules
-          run: go mod download
-      lint:
-        - name: Vet
-          run: go vet ./...
-      test:
-        - name: Test
-          run: go test -race ./...
-      build:
-        - name: Build
-          run: go build -o dist/app .
+[languages.go]
+detection = { files = ["go.mod"] }
+steps = [
+  { name = "Download modules", run = "go mod download" },
+  { name = "Vet", run = "go vet ./..." },
+  { name = "Test", run = "go test -race ./..." },
+  { name = "Build", run = "go build -o dist/app ." },
+]
 
-targets:
-  - name: cloudrun
-    defaults:
-      REGION: europe-west1
-    deploy:
-      - name: Build
-        run: docker build -t gcr.io/$PROJECT/$NAME:$VERSION .
-      - name: Push
-        run: docker push gcr.io/$PROJECT/$NAME:$VERSION
-      - name: Deploy
-        run: gcloud run deploy $NAME --image gcr.io/$PROJECT/$NAME:$VERSION
+[targets.cloudrun]
+vars = { REGION = "europe-west1" }
+steps = [
+  { name = "Build", run = "docker build -t gcr.io/$PROJECT/$NAME:$VERSION ." },
+  { name = "Push", run = "docker push gcr.io/$PROJECT/$NAME:$VERSION" },
+  { name = "Deploy", run = "gcloud run deploy $NAME --image gcr.io/$PROJECT/$NAME:$VERSION" },
+]
 ```
 
 ### 4. Add artifact configs
 
-```yaml
-# services/user-api/bear.artifact.yml
-name: user-api
-target: cloudrun
-depends:
-  - shared-lib
-params:
-  MEMORY: 1Gi
-env:
-  PROJECT: my-gcp-project
+```toml
+# services/user-api/bear.artifact.toml
+name = "user-api"
+target = "cloudrun"
+depends = ["shared-lib"]
+
+[vars]
+PROJECT = "my-gcp-project"
+MEMORY = "1Gi"
 ```
 
 For libraries (validate-only, no deploy):
 
-```yaml
-# libs/shared/bear.lib.yml
-name: shared-lib
+```toml
+# libs/shared/bear.lib.toml
+name = "shared-lib"
 ```
 
 ### 5. Run Bear
@@ -153,7 +139,7 @@ bear plan -d ./other-project
 | `bear list` | List all discovered artifacts |
 | `bear list --tree` | Show dependency tree |
 | `bear plan [artifacts...]` | Detect changes, validate, and create deployment plan |
-| `bear apply` | Execute the deployment plan from `.bear/plan.yml` |
+| `bear apply` | Execute the deployment plan from `.bear/plan.toml` |
 | `bear check` | Validate configuration and dependencies |
 | `bear preset list` | Show available presets |
 | `bear preset show <type> <name>` | Show preset details |
@@ -208,12 +194,12 @@ flowchart LR
 | Phase | Description |
 |-------|-------------|
 | **Detect** | Compare each artifact against its last deployed commit (lock file) |
-| **Plan** | Validate changed artifacts in parallel, write `.bear/plan.yml` |
+| **Plan** | Validate changed artifacts in parallel, write `.bear/plan.toml` |
 | **Apply** | Deploy from the plan, update lock file |
 
 ### Change Detection
 
-Bear compares each artifact against its **last deployed commit** (from `bear.lock.yml`). For each artifact it checks:
+Bear compares each artifact against its **last deployed commit** (from `bear.lock.toml`). For each artifact it checks:
 
 1. **Uncommitted changes** — Staged, unstaged, or untracked files
 2. **Commits since last deploy** — Changes between the deployed commit and HEAD
@@ -233,94 +219,96 @@ flowchart TB
 
 ### Lock File
 
-`bear.lock.yml` tracks what's deployed:
+`bear.lock.toml` tracks what's deployed:
 
-```yaml
-artifacts:
-  user-api:
-    commit: abc1234567890
-    timestamp: "2026-01-04T10:00:00Z"
-    version: abc1234
-    target: cloudrun
+```toml
+[artifacts.user-api]
+commit = "abc1234567890"
+timestamp = "2026-01-04T10:00:00Z"
+version = "abc1234"
+target = "cloudrun"
 ```
 
 ## Project Structure
 
 ```
 my-monorepo/
-├── bear.config.yml          # Main config
-├── bear.lock.yml            # Deployed versions (auto-generated)
+├── bear.config.toml         # Main config
+├── bear.lock.toml           # Deployed versions (auto-generated)
 ├── .bear/                   # Plan directory (gitignored)
-│   └── plan.yml             # Validated deployment plan
+│   └── plan.toml            # Validated deployment plan
 ├── apps/
 │   └── dashboard/
-│       ├── bear.artifact.yml
+│       ├── bear.artifact.toml
 │       └── ...
 ├── libs/
 │   ├── shared-go/
-│   │   ├── bear.lib.yml     # Library (validate-only)
+│   │   ├── bear.lib.toml    # Library (validate-only)
 │   │   └── ...
 │   └── ui-components/
-│       └── bear.lib.yml
+│       └── bear.lib.toml
 └── services/
     ├── user-api/
-    │   ├── bear.artifact.yml
+    │   ├── bear.artifact.toml
     │   └── ...
     └── order-api/
-        └── bear.artifact.yml
+        └── bear.artifact.toml
 ```
 
 ## Configuration Reference
 
-### bear.config.yml
+### bear.config.toml
 
-```yaml
-name: project-name
+```toml
+name = "project-name"
 
-languages:
-  - name: go                    # Language identifier
-    detection:
-      files: [go.mod]           # Files that identify this language
-    validation:
-      setup: [...]              # Setup steps
-      lint: [...]               # Linting steps  
-      test: [...]               # Test steps
-      build: [...]              # Build steps
+[languages.go]
+detection = { files = ["go.mod"] }     # Files that identify this language
+vars = { KEY = "value" }               # Default variables (optional)
+steps = [
+  { name = "Step Name", run = "command" },
+]
 
-targets:
-  - name: cloudrun              # Target identifier
-    defaults:                   # Default parameters
-      REGION: europe-west1
-    deploy: [...]               # Deployment steps
+[targets.cloudrun]
+vars = { REGION = "europe-west1" }     # Default variables
+steps = [
+  { name = "Step Name", run = "command" },
+]
 ```
 
-### bear.artifact.yml
+### bear.artifact.toml
 
-```yaml
-name: my-service                # Unique artifact name
-target: cloudrun                # Target from config
-depends:                        # Dependencies (optional)
-  - shared-lib
-  - other-service
-params:                         # Override target defaults
-  MEMORY: 2Gi
+```toml
+name = "my-service"             # Unique artifact name
+target = "cloudrun"             # Target from config
+depends = ["shared-lib", "other-service"]  # Dependencies (optional)
+
+[vars]                          # Override target/language vars
+MEMORY = "2Gi"
 ```
 
-### bear.lib.yml
+### bear.lib.toml
 
-```yaml
-name: shared-lib                # Library name (validate-only)
+```toml
+name = "shared-lib"             # Library name (validate-only)
 ```
 
 ## Variables
 
-These variables are available in deployment steps:
+These variables are available in all steps (validation and deployment):
 
 | Variable | Description |
 |----------|-------------|
 | `$NAME` | Artifact name |
 | `$VERSION` | Short commit hash (7 chars) |
-| Custom params | From target defaults and artifact params |
+| Custom vars | From language `vars`, target `vars`, and artifact `vars` |
+
+### Variable Precedence
+
+1. Artifact `vars` (highest priority)
+2. Target `vars`
+3. Language `vars`
+4. Auto-vars: `$NAME`, `$VERSION`
 
 ## License
 

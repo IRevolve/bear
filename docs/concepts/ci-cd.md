@@ -4,7 +4,7 @@ Bear is designed to work seamlessly with CI/CD systems. This guide covers common
 
 ## The Lock File Problem
 
-After `bear apply`, the lock file (`bear.lock.yml`) is updated with deployed versions. This creates a challenge:
+After `bear apply`, the lock file (`bear.lock.toml`) is updated with deployed versions. This creates a challenge:
 
 1. Lock file changes → Need to commit
 2. Commit triggers CI → New build starts
@@ -24,7 +24,7 @@ This:
 
 1. Creates and validates a deployment plan
 2. Runs the deployments
-3. Updates `bear.lock.yml`
+3. Updates `bear.lock.toml`
 4. Commits with message: `chore(bear): update lock file [skip ci]`
 5. Pushes to the repository
 
@@ -38,7 +38,7 @@ bear apply --no-commit
 
 ### Option 2: Path Filters
 
-Configure your CI to ignore changes to only `bear.lock.yml`:
+Configure your CI to ignore changes to only `bear.lock.toml`:
 
 === "GitHub Actions"
 
@@ -47,7 +47,7 @@ Configure your CI to ignore changes to only `bear.lock.yml`:
       push:
         branches: [main]
         paths-ignore:
-          - 'bear.lock.yml'
+          - 'bear.lock.toml'
     ```
 
 === "GitLab CI"
@@ -56,7 +56,7 @@ Configure your CI to ignore changes to only `bear.lock.yml`:
     workflow:
       rules:
         - changes:
-            - bear.lock.yml
+            - bear.lock.toml
           when: never
         - when: always
     ```
@@ -94,7 +94,7 @@ on:
   push:
     branches: [main]
     paths-ignore:
-      - 'bear.lock.yml'
+      - 'bear.lock.toml'
 
 jobs:
   deploy:
@@ -174,7 +174,7 @@ on:
   push:
     branches: [main]
     paths-ignore:
-      - 'bear.lock.yml'
+      - 'bear.lock.toml'
       - 'docs/**'
       - '*.md'
 
@@ -225,7 +225,7 @@ deploy:
     - if: $CI_COMMIT_BRANCH == "main"
       changes:
         - "**/*"
-        - "!bear.lock.yml"
+        - "!bear.lock.toml"
   
   before_script:
     - go install github.com/irevolve/bear@latest

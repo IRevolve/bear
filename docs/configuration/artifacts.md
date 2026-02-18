@@ -2,22 +2,20 @@
 
 Artifacts are the deployable units in your monorepo. Each service, app, or library has its own artifact config.
 
-## Services: `bear.artifact.yml`
+## Services: `bear.artifact.toml`
 
 Services are validated and deployed.
 
-```yaml
-name: user-api
-target: cloudrun
-depends:
-  - shared-lib
-  - auth-lib
-env:
-  PROJECT: my-gcp-project
-  REGION: europe-west1
-params:
-  MEMORY: 1Gi
-  CPU: "2"
+```toml
+name = "user-api"
+target = "cloudrun"
+depends = ["shared-lib", "auth-lib"]
+
+[vars]
+PROJECT = "my-gcp-project"
+REGION = "europe-west1"
+MEMORY = "1Gi"
+CPU = "2"
 ```
 
 ### Fields
@@ -27,15 +25,14 @@ params:
 | `name` | ✓ | Unique artifact name |
 | `target` | ✓ | Deployment target (from config) |
 | `depends` | | List of dependencies (artifact names) |
-| `env` | | Environment variables for commands |
-| `params` | | Parameters passed to target |
+| `vars` | | Variables passed to language and target steps |
 
-## Libraries: `bear.lib.yml`
+## Libraries: `bear.lib.toml`
 
 Libraries are validated but not deployed. They're used as dependencies for other artifacts.
 
-```yaml
-name: shared-lib
+```toml
+name = "shared-lib"
 ```
 
 When a library changes, all artifacts that depend on it are marked for rebuild.
@@ -45,13 +42,14 @@ When a library changes, all artifacts that depend on it are marked for rebuild.
 | Field | Required | Description |
 |-------|----------|-------------|
 | `name` | ✓ | Unique library name |
+| `depends` | | List of dependencies (other library names) |
 
 ## Discovery
 
 Bear automatically discovers artifacts by scanning for:
 
-- `bear.artifact.yml` — Services
-- `bear.lib.yml` — Libraries
+- `bear.artifact.toml` — Services
+- `bear.lib.toml` — Libraries
 
 Artifacts are discovered recursively from the project root.
 
@@ -87,26 +85,26 @@ Bear automatically detects the language of each artifact based on files present:
 
 ```
 my-monorepo/
-├── bear.config.yml
-├── bear.lock.yml              # Auto-generated
+├── bear.config.toml
+├── bear.lock.toml              # Auto-generated
 ├── apps/
 │   └── dashboard/
-│       ├── bear.artifact.yml
+│       ├── bear.artifact.toml
 │       ├── package.json
 │       └── src/
 ├── libs/
 │   ├── shared-go/
-│   │   ├── bear.lib.yml
+│   │   ├── bear.lib.toml
 │   │   └── go.mod
 │   └── ui-components/
-│       ├── bear.lib.yml
+│       ├── bear.lib.toml
 │       └── package.json
 └── services/
     ├── user-api/
-    │   ├── bear.artifact.yml
+    │   ├── bear.artifact.toml
     │   ├── go.mod
     │   └── main.go
     └── order-api/
-        ├── bear.artifact.yml
+        ├── bear.artifact.toml
         └── go.mod
 ```

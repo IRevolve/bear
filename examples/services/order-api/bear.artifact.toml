@@ -1,0 +1,6 @@
+name = "order-api"
+target = "cloudrun"
+depends = ["shared-go", "user-api"]
+
+[vars]
+MEMORY = "512Mi"

@@ -17,21 +17,21 @@ A Terraform-inspired CI/CD tool for monorepos. Bear detects changes, resolves de
 
 ## Quick Example
 
-```yaml title="bear.config.yml"
-name: my-platform
+```toml title="bear.config.toml"
+name = "my-platform"
 
-use:
-  languages: [go, node]
-  targets: [docker, cloudrun]
+[use]
+languages = ["go", "node"]
+targets = ["docker", "cloudrun"]
 ```
 
-```yaml title="services/api/bear.artifact.yml"
-name: api
-target: cloudrun
-depends:
-  - shared-lib
-env:
-  PROJECT: my-gcp-project
+```toml title="services/api/bear.artifact.toml"
+name = "api"
+target = "cloudrun"
+depends = ["shared-lib"]
+
+[vars]
+PROJECT = "my-gcp-project"
 ```
 
 ```bash
@@ -58,5 +58,5 @@ flowchart LR
 
 - 📥 [**Installation**](getting-started/installation.md) — Install Bear via `go install` or build from source
 - 🚀 [**Quick Start**](getting-started/quickstart.md) — Get up and running in 5 minutes
-- ⚙️ [**Configuration**](configuration/project.md) — Learn about `bear.config.yml` and artifacts
+- ⚙️ [**Configuration**](configuration/project.md) — Learn about `bear.config.toml` and artifacts
 - 📦 [**Presets**](configuration/presets.md) — Use community presets for languages and targets

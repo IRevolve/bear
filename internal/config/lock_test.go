@@ -14,7 +14,7 @@ func TestLoadLock_NewFile(t *testing.T) {
 	}
 	defer os.RemoveAll(tmpDir)
 
-	lockPath := filepath.Join(tmpDir, "bear.lock.yml")
+	lockPath := filepath.Join(tmpDir, "bear.lock.toml")
 
 	// Load non-existent file should create empty lock
 	lock, err := LoadLock(lockPath)
@@ -37,15 +37,14 @@ func TestLoadLock_ExistingFile(t *testing.T) {
 	}
 	defer os.RemoveAll(tmpDir)
 
-	lockContent := `artifacts:
-  user-api:
-    commit: abc1234
-    timestamp: "2026-01-01T10:00:00Z"
-    version: v1.0.0
-    target: cloudrun
-    pinned: true
+	lockContent := `[artifacts.user-api]
+commit = "abc1234"
+timestamp = "2026-01-01T10:00:00Z"
+version = "v1.0.0"
+target = "cloudrun"
+pinned = true
 `
-	lockPath := filepath.Join(tmpDir, "bear.lock.yml")
+	lockPath := filepath.Join(tmpDir, "bear.lock.toml")
 	if err := os.WriteFile(lockPath, []byte(lockContent), 0644); err != nil {
 		t.Fatalf("failed to write lock: %v", err)
 	}
@@ -166,7 +165,7 @@ func TestLockFile_Save(t *testing.T) {
 		},
 	}
 
-	lockPath := filepath.Join(tmpDir, "bear.lock.yml")
+	lockPath := filepath.Join(tmpDir, "bear.lock.toml")
 	if err := lock.Save(lockPath); err != nil {
 		t.Fatalf("Save failed: %v", err)
 	}

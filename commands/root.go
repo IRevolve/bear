@@ -30,7 +30,7 @@ what gets deployed. Plan validates and creates a deployment plan,
 apply executes it.
 
 Change detection is based on comparing against the last deployed commit
-for each artifact (stored in bear.lock.yml).
+for each artifact (stored in bear.lock.toml).
 
 Usage:
   bear check                     Validate configuration and dependencies

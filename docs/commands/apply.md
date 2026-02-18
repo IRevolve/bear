@@ -10,7 +10,7 @@ bear apply [flags]
 
 ## Description
 
-Reads the plan from `.bear/plan.yml` (created by `bear plan`) and executes the deployments in parallel. No validation is performed — only deploy steps run.
+Reads the plan from `.bear/plan.toml` (created by `bear plan`) and executes the deployments in parallel. No validation is performed — only deploy steps run.
 
 After successful deployment, the lock file is updated and automatically committed with `[skip ci]`. Use `--no-commit` to disable auto-commit.
 
@@ -45,11 +45,11 @@ bear apply --concurrency 5
 
 ## Execution Flow
 
-1. **Read plan** — Load `.bear/plan.yml`
+1. **Read plan** — Load `.bear/plan.toml`
 2. **Deploy** — Run target deploy steps in parallel for each artifact
-3. **Update lock** — Write new commit hashes to `bear.lock.yml`
+3. **Update lock** — Write new commit hashes to `bear.lock.toml`
 4. **Commit** — Auto-commit lock file with `[skip ci]` (unless `--no-commit`)
-5. **Cleanup** — Remove `.bear/plan.yml`
+5. **Cleanup** — Remove `.bear/plan.toml`
 
 ## Output
 

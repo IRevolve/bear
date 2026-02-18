@@ -34,27 +34,22 @@ func resolveLanguages(cfg *config.Config) error {
 
 	manager := NewManager()
 
-	// Create map of already defined languages
-	existing := make(map[string]bool)
-	for _, lang := range cfg.Languages {
-		existing[lang.Name] = true
+	// Initialize map if nil
+	if cfg.Languages == nil {
+		cfg.Languages = make(map[string]config.Language)
 	}
 
-	// Add presets first (can be overridden)
-	var presetLangs []config.Language
 	for _, name := range cfg.Use.Languages {
-		preset, err := manager.GetLanguage(name)
-		if err != nil {
-			return fmt.Errorf("unknown language preset: %s (run 'bear preset update' to refresh cache)", name)
-		}
-		// Only add if not already defined
-		if !existing[name] {
-			presetLangs = append(presetLangs, preset)
+		// Only add if not already defined (local overrides preset)
+		if _, exists := cfg.Languages[name]; !exists {
+			preset, err := manager.GetLanguage(name)
+			if err != nil {
+				return fmt.Errorf("unknown language preset: %s (run 'bear preset update' to refresh cache)", name)
+			}
+			preset.Name = name
+			cfg.Languages[name] = preset
 		}
 	}
-
-	// Presets first, then custom (custom overrides)
-	cfg.Languages = append(presetLangs, cfg.Languages...)
 
 	return nil
 }
@@ -67,25 +62,22 @@ func resolveTargets(cfg *config.Config) error {
 
 	manager := NewManager()
 
-	// Create map of already defined targets
-	existing := make(map[string]bool)
-	for _, target := range cfg.Targets {
-		existing[target.Name] = true
+	// Initialize map if nil
+	if cfg.Targets == nil {
+		cfg.Targets = make(map[string]config.Target)
 	}
 
-	// Add presets first
-	var presetTargets []config.TargetTemplate
 	for _, name := range cfg.Use.Targets {
-		preset, err := manager.GetTarget(name)
-		if err != nil {
-			return fmt.Errorf("unknown target preset: %s (run 'bear preset update' to refresh cache)", name)
-		}
-		if !existing[name] {
-			presetTargets = append(presetTargets, preset)
+		// Only add if not already defined (local overrides preset)
+		if _, exists := cfg.Targets[name]; !exists {
+			preset, err := manager.GetTarget(name)
+			if err != nil {
+				return fmt.Errorf("unknown target preset: %s (run 'bear preset update' to refresh cache)", name)
+			}
+			preset.Name = name
+			cfg.Targets[name] = preset
 		}
 	}
-
-	cfg.Targets = append(presetTargets, cfg.Targets...)
 
 	return nil
 }

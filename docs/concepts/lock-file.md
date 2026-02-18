@@ -1,6 +1,6 @@
 # Lock File
 
-Bear uses a lock file (`bear.lock.yml`) to track deployed versions of each artifact.
+Bear uses a lock file (`bear.lock.toml`) to track deployed versions of each artifact.
 
 ## Purpose
 
@@ -14,19 +14,19 @@ The lock file stores:
 
 ## Format
 
-```yaml title="bear.lock.yml"
-artifacts:
-  user-api:
-    commit: abc1234567890abcdef
-    timestamp: "2026-01-04T10:00:00Z"
-    version: abc1234
-    target: cloudrun
-  order-api:
-    commit: def4567890123abcdef
-    timestamp: "2026-01-03T15:30:00Z"
-    version: def4567
-    target: cloudrun
-    pinned: true  # Artifact is pinned
+```toml title="bear.lock.toml"
+[artifacts.user-api]
+commit = "abc1234567890abcdef"
+timestamp = "2026-01-04T10:00:00Z"
+version = "abc1234"
+target = "cloudrun"
+
+[artifacts.order-api]
+commit = "def4567890123abcdef"
+timestamp = "2026-01-03T15:30:00Z"
+version = "def4567"
+target = "cloudrun"
+pinned = true  # Artifact is pinned
 ```
 
 ## How It Works
@@ -45,16 +45,16 @@ The lock file is automatically managed by Bear:
 - Should be committed to Git
 
 !!! tip "Commit the Lock File"
-    Always commit `bear.lock.yml` to your repository. Bear auto-commits it by default after `bear apply`.
+    Always commit `bear.lock.toml` to your repository. Bear auto-commits it by default after `bear apply`.
 
 ## Pinning
 
 When an artifact is pinned, it's skipped during `bear plan`:
 
-```yaml
-user-api:
-  commit: abc1234567890
-  pinned: true
+```toml
+[artifacts.user-api]
+commit = "abc1234567890"
+pinned = true
 ```
 
 Artifacts get pinned when:
@@ -74,10 +74,10 @@ If you need to force a full rebuild:
 
 ```bash
 # Remove lock file (all artifacts will rebuild)
-rm bear.lock.yml
+rm bear.lock.toml
 
 # Or remove specific artifact
-# (edit bear.lock.yml manually)
+# (edit bear.lock.toml manually)
 ```
 
 ## CI/CD Usage

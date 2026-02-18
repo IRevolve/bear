@@ -10,7 +10,7 @@ bear plan [artifacts...] [flags]
 
 ## Description
 
-Analyzes changes in your repository, runs validation (setup, lint, test, build) for changed artifacts **in parallel**, and writes a validated deployment plan to `.bear/plan.yml`.
+Analyzes changes in your repository, runs validation steps for changed artifacts **in parallel**, and writes a validated deployment plan to `.bear/plan.toml`.
 
 If any validation fails, no plan file is written and the command exits with code 1.
 
@@ -81,13 +81,13 @@ bear plan -d ./my-project
 ──────────────────────────────────────
   Summary: 3 to deploy, 1 unchanged, 1 pinned
 
-  Plan written to .bear/plan.yml
+  Plan written to .bear/plan.toml
   Run 'bear apply' to execute this plan.
 ```
 
 ## Plan File
 
-The plan is saved to `.bear/plan.yml` and contains:
+The plan is saved to `.bear/plan.toml` and contains:
 
 - Validated artifacts with their deploy steps
 - Skipped artifacts and reasons

@@ -1,0 +1,7 @@
+name = "dashboard"
+target = "s3-static"
+depends = ["ui-components", "user-api", "order-api"]
+
+[vars]
+BUCKET = "acme-dashboard-prod"
+CF_DIST = "E1ABCDEFGHIJ"

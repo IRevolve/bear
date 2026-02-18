@@ -46,10 +46,10 @@ Targets:
   • s3
   • s3-static
 
-Usage in bear.config.yml:
-  use:
-    languages: [go, node]
-    targets: [docker, cloudrun]
+Usage in bear.config.toml:
+  [use]
+  languages = ["go", "node"]
+  targets = ["docker", "cloudrun"]
 ```
 
 ## bear preset show
@@ -73,15 +73,14 @@ bear preset show target docker
 Detection:
   files: [go.mod]
 
-Validation:
-  setup:
-    - Download modules: go mod download
-  lint:
-    - Vet: go vet ./...
-  test:
-    - Test: go test -race ./...
-  build:
-    - Build: go build -o dist/app .
+Vars:
+  (none)
+
+Steps:
+  - Download modules: go mod download
+  - Vet: go vet ./...
+  - Test: go test -race ./...
+  - Build: go build -o dist/app .
 ```
 
 ### Target Output
@@ -90,10 +89,10 @@ Validation:
 🎯 Target: docker
 ───────────────────────
 
-Defaults:
+Vars:
   REGISTRY: docker.io
 
-Deploy:
+Steps:
   - Build image: docker build -t $REGISTRY/$NAME:$VERSION .
   - Push image: docker push $REGISTRY/$NAME:$VERSION
 ```

@@ -55,9 +55,9 @@ func Check(configPath string) error {
 		p.Println(p.yellow("none defined"))
 	} else {
 		p.Printf("%s %d defined\n", p.green("✓"), len(cfg.Languages))
-		for _, lang := range cfg.Languages {
+		for name, lang := range cfg.Languages {
 			if len(lang.Detection.Files) == 0 && lang.Detection.Pattern == "" {
-				result.AddWarning("Language '%s' has no detection rules", lang.Name)
+				result.AddWarning("Language '%s' has no detection rules", name)
 			}
 		}
 	}
@@ -71,8 +71,8 @@ func Check(configPath string) error {
 		p.Printf("%s %d defined\n", p.green("✓"), len(cfg.Targets))
 	}
 	targetNames := make(map[string]bool)
-	for _, t := range cfg.Targets {
-		targetNames[t.Name] = true
+	for name := range cfg.Targets {
+		targetNames[name] = true
 	}
 
 	// 4. Scan artifacts
@@ -126,7 +126,7 @@ func Check(configPath string) error {
 		}
 
 		// Check dependencies
-		for _, dep := range a.Artifact.DependsOn {
+		for _, dep := range a.Artifact.Depends {
 			if _, ok := artifactMap[dep]; !ok {
 				result.AddError("Artifact '%s' depends on unknown artifact '%s'",
 					a.Artifact.Name, dep)
@@ -163,7 +163,7 @@ func findCycles(artifacts []internal.DiscoveredArtifact) [][]string {
 	// Build adjacency map
 	deps := make(map[string][]string)
 	for _, a := range artifacts {
-		deps[a.Artifact.Name] = a.Artifact.DependsOn
+		deps[a.Artifact.Name] = a.Artifact.Depends
 	}
 
 	// DFS for each node

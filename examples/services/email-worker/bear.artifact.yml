@@ -1,4 +1,0 @@
-name: email-worker
-target: cloudrun-job
-depends_on:
-  - shared-go

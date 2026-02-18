@@ -86,7 +86,7 @@ To find a commit to pin to:
 git log --oneline -- services/user-api
 
 # Or check the lock file history
-git log --oneline bear.lock.yml
+git log --oneline bear.lock.toml
 ```
 
 ## CI/CD Rollback

@@ -4,7 +4,7 @@ Bear uses Git to detect changes in your monorepo. Unlike traditional CI systems 
 
 ## How It Works
 
-For each artifact, Bear compares against its **last deployed commit** (stored in `bear.lock.yml`):
+For each artifact, Bear compares against its **last deployed commit** (stored in `bear.lock.toml`):
 
 ```mermaid
 flowchart TB
@@ -58,14 +58,14 @@ flowchart TB
 
 Each artifact is tracked independently:
 
-```yaml title="bear.lock.yml"
-artifacts:
-  user-api:
-    commit: abc1234567890
-    timestamp: "2026-01-04T10:00:00Z"
-  order-api:
-    commit: def4567890123
-    timestamp: "2026-01-03T15:30:00Z"
+```toml title="bear.lock.toml"
+[artifacts.user-api]
+commit = "abc1234567890"
+timestamp = "2026-01-04T10:00:00Z"
+
+[artifacts.order-api]
+commit = "def4567890123"
+timestamp = "2026-01-03T15:30:00Z"
 ```
 
 This means:
