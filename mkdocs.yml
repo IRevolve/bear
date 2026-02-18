@@ -37,8 +37,21 @@ nav:
   - Getting Started: getting-started.md
   - Configuration: configuration.md
   - CI/CD: ci-cd.md
-  - Commands: commands.md
-  - Concepts: concepts.md
+  - Commands:
+      - Overview: commands/index.md
+      - init: commands/init.md
+      - plan: commands/plan.md
+      - apply: commands/apply.md
+      - check: commands/check.md
+      - list: commands/list.md
+      - preset: commands/preset.md
+  - Concepts:
+      - Overview: concepts/index.md
+      - Change Detection: concepts/change-detection.md
+      - Dependencies: concepts/dependencies.md
+      - Lock File: concepts/lock-file.md
+      - Pinning & Rollback: concepts/pinning.md
+      - Plan/Apply: concepts/plan-apply.md
 
 markdown_extensions:
   - admonition
