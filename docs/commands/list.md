@@ -10,7 +10,7 @@ bear list [artifacts...] [flags]
 
 ## Description
 
-Scans the project for `bear.artifact.yml` and `bear.lib.yml` files and displays all discovered artifacts.
+Scans the project for `bear.artifact.toml` and `bear.lib.toml` files and displays all discovered artifacts.
 
 ## Arguments
 

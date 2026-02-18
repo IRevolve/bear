@@ -50,15 +50,15 @@ func List(configPath string) error {
 			p.Detail("Target:  ", a.Artifact.Target)
 		}
 
-		if len(a.Artifact.Params) > 0 {
-			p.Detail("Params:  ", "")
-			for k, v := range a.Artifact.Params {
+		if len(a.Artifact.Vars) > 0 {
+			p.Detail("Vars:    ", "")
+			for k, v := range a.Artifact.Vars {
 				p.Printf("               %s\n", p.dim(fmt.Sprintf("%s: %s", k, v)))
 			}
 		}
 
-		if len(a.Artifact.DependsOn) > 0 {
-			p.Detail("Depends: ", strings.Join(a.Artifact.DependsOn, ", "))
+		if len(a.Artifact.Depends) > 0 {
+			p.Detail("Depends: ", strings.Join(a.Artifact.Depends, ", "))
 		}
 
 		p.Blank()

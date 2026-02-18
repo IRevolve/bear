@@ -39,7 +39,7 @@ bear plan
 bear apply
 ```
 
-`bear plan` writes a validated plan to `.bear/plan.yml`. `bear apply` reads this file and executes only the deployments — no re-validation.
+`bear plan` writes a validated plan to `.bear/plan.toml`. `bear apply` reads this file and executes only the deployments — no re-validation.
 
 ## Targeting Specific Artifacts
 

@@ -10,18 +10,18 @@ Navigate to your monorepo and run:
 bear init
 ```
 
-This creates a `bear.config.yml` with auto-detected languages.
+This creates a `bear.config.toml` with auto-detected languages.
 
 ## 2. Configure Presets
 
 Edit the config to use presets for your languages and targets:
 
-```yaml title="bear.config.yml"
-name: my-platform
+```toml title="bear.config.toml"
+name = "my-platform"
 
-use:
-  languages: [go, node]
-  targets: [docker, cloudrun]
+[use]
+languages = ["go", "node"]
+targets = ["docker", "cloudrun"]
 ```
 
 !!! tip "Available Presets"
@@ -29,19 +29,20 @@ use:
 
 ## 3. Add Artifacts
 
-Create a `bear.artifact.yml` in each deployable service:
+Create a `bear.artifact.toml` in each deployable service:
 
-```yaml title="services/api/bear.artifact.yml"
-name: api
-target: docker
-env:
-  REGISTRY: ghcr.io/myorg
+```toml title="services/api/bear.artifact.toml"
+name = "api"
+target = "docker"
+
+[vars]
+REGISTRY = "ghcr.io/myorg"
 ```
 
 For libraries (validate-only, no deploy):
 
-```yaml title="libs/shared/bear.lib.yml"
-name: shared-lib
+```toml title="libs/shared/bear.lib.toml"
+name = "shared-lib"
 ```
 
 ## 4. Check Configuration
@@ -76,7 +77,7 @@ Detect changes, validate, and create a deployment plan:
 bear plan
 ```
 
-This runs validation (lint, test, build) in parallel and writes the plan to `.bear/plan.yml`.
+This runs validation steps in parallel and writes the plan to `.bear/plan.toml`.
 
 Example output:
 
@@ -99,7 +100,7 @@ Example output:
 ──────────────────────────────────────
   Summary: 1 to deploy, 0 unchanged
 
-  Plan written to .bear/plan.yml
+  Plan written to .bear/plan.toml
   Run 'bear apply' to execute this plan.
 ```
 
@@ -111,7 +112,7 @@ Execute the deployment plan:
 bear apply
 ```
 
-This reads `.bear/plan.yml`, deploys the artifacts, updates the lock file, and auto-commits with `[skip ci]`.
+This reads `.bear/plan.toml`, deploys the artifacts, updates the lock file, and auto-commits with `[skip ci]`.
 
 ## Next Steps
 

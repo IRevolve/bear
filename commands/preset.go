@@ -51,10 +51,10 @@ var presetListCmd = &cobra.Command{
 		}
 
 		fmt.Println()
-		fmt.Println("Usage in bear.config.yml:")
-		fmt.Println("  use:")
-		fmt.Println("    languages: [go, node]")
-		fmt.Println("    targets: [docker, cloudrun]")
+		fmt.Println("Usage in bear.config.toml:")
+		fmt.Println("  [use]")
+		fmt.Println("  languages = [\"go\", \"node\"]")
+		fmt.Println("  targets = [\"docker\", \"cloudrun\"]")
 
 		return nil
 	},
@@ -110,30 +110,18 @@ Examples:
 			if lang.Detection.Pattern != "" {
 				fmt.Printf("  pattern: %s\n", lang.Detection.Pattern)
 			}
-			fmt.Println()
-			fmt.Println("Validation:")
-			if len(lang.Validation.Setup) > 0 {
-				fmt.Println("  setup:")
-				for _, s := range lang.Validation.Setup {
-					fmt.Printf("    - %s: %s\n", s.Name, s.Run)
+			if len(lang.Vars) > 0 {
+				fmt.Println()
+				fmt.Println("Vars:")
+				for k, v := range lang.Vars {
+					fmt.Printf("  %s: %s\n", k, v)
 				}
 			}
-			if len(lang.Validation.Lint) > 0 {
-				fmt.Println("  lint:")
-				for _, s := range lang.Validation.Lint {
-					fmt.Printf("    - %s: %s\n", s.Name, s.Run)
-				}
-			}
-			if len(lang.Validation.Test) > 0 {
-				fmt.Println("  test:")
-				for _, s := range lang.Validation.Test {
-					fmt.Printf("    - %s: %s\n", s.Name, s.Run)
-				}
-			}
-			if len(lang.Validation.Build) > 0 {
-				fmt.Println("  build:")
-				for _, s := range lang.Validation.Build {
-					fmt.Printf("    - %s: %s\n", s.Name, s.Run)
+			if len(lang.Steps) > 0 {
+				fmt.Println()
+				fmt.Println("Steps:")
+				for _, s := range lang.Steps {
+					fmt.Printf("  - %s: %s\n", s.Name, s.Run)
 				}
 			}
 
@@ -146,15 +134,15 @@ Examples:
 			fmt.Printf("🎯 Target: %s\n", target.Name)
 			fmt.Println("───────────────────────")
 			fmt.Println()
-			if len(target.Defaults) > 0 {
-				fmt.Println("Defaults:")
-				for k, v := range target.Defaults {
+			if len(target.Vars) > 0 {
+				fmt.Println("Vars:")
+				for k, v := range target.Vars {
 					fmt.Printf("  %s: %s\n", k, v)
 				}
 				fmt.Println()
 			}
-			fmt.Println("Deploy:")
-			for _, s := range target.Deploy {
+			fmt.Println("Steps:")
+			for _, s := range target.Steps {
 				fmt.Printf("  - %s: %s\n", s.Name, s.Run)
 			}
 

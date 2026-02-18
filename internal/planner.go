@@ -47,15 +47,8 @@ type PlanOptions struct {
 
 // getValidationSteps returns all validation steps for a given language
 func getValidationSteps(cfg *config.Config, language string) []config.Step {
-	for _, lang := range cfg.Languages {
-		if lang.Name == language {
-			var steps []config.Step
-			steps = append(steps, lang.Validation.Setup...)
-			steps = append(steps, lang.Validation.Lint...)
-			steps = append(steps, lang.Validation.Test...)
-			steps = append(steps, lang.Validation.Build...)
-			return steps
-		}
+	if lang, ok := cfg.Languages[language]; ok {
+		return lang.Steps
 	}
 	return nil
 }
@@ -63,7 +56,7 @@ func getValidationSteps(cfg *config.Config, language string) []config.Step {
 // CreatePlanWithOptions creates a plan with extended options
 func CreatePlanWithOptions(rootPath string, cfg *config.Config, opts PlanOptions) (*Plan, error) {
 	// Load lock file
-	lockPath := filepath.Join(rootPath, "bear.lock.yml")
+	lockPath := filepath.Join(rootPath, "bear.lock.toml")
 	lockFile, err := config.LoadLock(lockPath)
 	if err != nil {
 		return nil, err
@@ -90,7 +83,6 @@ func CreatePlanWithOptions(rootPath string, cfg *config.Config, opts PlanOptions
 
 	// Get uncommitted/untracked changes (same for all artifacts)
 	uncommittedFiles, _ := GetUncommittedChanges(rootPath)
-	uncommittedDirs := GetAffectedDirs(uncommittedFiles)
 	plan := &Plan{
 		TotalChanges: len(uncommittedFiles),
 		LockFile:     lockFile,
@@ -113,7 +105,7 @@ func CreatePlanWithOptions(rootPath string, cfg *config.Config, opts PlanOptions
 		}
 
 		// 1. Check uncommitted changes
-		affected, files := isArtifactAffected(relPath, uncommittedFiles, uncommittedDirs)
+		affected, files := isArtifactAffected(relPath, uncommittedFiles)
 
 		// 2. Check changes since last deployment
 		lastDeployed := lockFile.GetLastDeployedCommit(artifact.Artifact.Name)
@@ -125,7 +117,7 @@ func CreatePlanWithOptions(rootPath string, cfg *config.Config, opts PlanOptions
 				affected = true
 				files = append(files, relPath+" (deployed commit not found)")
 			} else {
-				commitAffected, commitFiles := isArtifactAffected(relPath, commitChanges, GetAffectedDirs(commitChanges))
+				commitAffected, commitFiles := isArtifactAffected(relPath, commitChanges)
 				if commitAffected {
 					affected = true
 					files = append(files, commitFiles...)
@@ -149,11 +141,8 @@ func CreatePlanWithOptions(rootPath string, cfg *config.Config, opts PlanOptions
 			// Find deploy steps from target (only for non-libraries)
 			var deploySteps []config.Step
 			if !artifact.Artifact.IsLib {
-				for _, t := range cfg.Targets {
-					if t.Name == artifact.Artifact.Target {
-						deploySteps = t.Deploy
-						break
-					}
+				if t, ok := cfg.Targets[artifact.Artifact.Target]; ok {
+					deploySteps = t.Steps
 				}
 			}
 
@@ -193,7 +182,7 @@ func CreatePlanWithOptions(rootPath string, cfg *config.Config, opts PlanOptions
 	return plan, nil
 }
 
-func isArtifactAffected(artifactPath string, changedFiles []ChangedFile, affectedDirs map[string]bool) (bool, []string) {
+func isArtifactAffected(artifactPath string, changedFiles []ChangedFile) (bool, []string) {
 	var affected []string
 
 	for _, f := range changedFiles {
@@ -220,7 +209,7 @@ func (p *Plan) addDependentArtifacts(artifacts []DiscoveredArtifact, cfg *config
 		changed = false
 		for i, action := range p.Actions {
 			if action.Action == ActionSkip {
-				for _, dep := range action.Artifact.Artifact.DependsOn {
+				for _, dep := range action.Artifact.Artifact.Depends {
 					if changedNames[dep] {
 						// Find validation steps for the language
 						validationSteps := getValidationSteps(cfg, action.Artifact.Language)
@@ -233,17 +222,14 @@ func (p *Plan) addDependentArtifacts(artifacts []DiscoveredArtifact, cfg *config
 
 						// Add deploy action (only for non-libraries)
 						if !action.Artifact.Artifact.IsLib {
-							for _, t := range cfg.Targets {
-								if t.Name == action.Artifact.Artifact.Target {
-									p.Actions = append(p.Actions, PlannedAction{
-										Artifact: action.Artifact,
-										Action:   ActionDeploy,
-										Reason:   "dependency '" + dep + "' changed",
-										Steps:    t.Deploy,
-									})
-									p.ToDeploy++
-									break
-								}
+							if t, ok := cfg.Targets[action.Artifact.Artifact.Target]; ok {
+								p.Actions = append(p.Actions, PlannedAction{
+									Artifact: action.Artifact,
+									Action:   ActionDeploy,
+									Reason:   "dependency '" + dep + "' changed",
+									Steps:    t.Steps,
+								})
+								p.ToDeploy++
 							}
 						}
 
@@ -258,19 +244,19 @@ func (p *Plan) addDependentArtifacts(artifacts []DiscoveredArtifact, cfg *config
 }
 
 // filterArtifacts filters artifacts by the specified names
-func filterArtifacts(artifacts []DiscoveredArtifact, targets []string) []DiscoveredArtifact {
-	if len(targets) == 0 {
+func filterArtifacts(artifacts []DiscoveredArtifact, names []string) []DiscoveredArtifact {
+	if len(names) == 0 {
 		return artifacts
 	}
 
-	targetMap := make(map[string]bool)
-	for _, t := range targets {
-		targetMap[t] = true
+	nameMap := make(map[string]bool)
+	for _, n := range names {
+		nameMap[n] = true
 	}
 
 	var filtered []DiscoveredArtifact
 	for _, a := range artifacts {
-		if targetMap[a.Artifact.Name] {
+		if nameMap[a.Artifact.Name] {
 			filtered = append(filtered, a)
 		}
 	}
@@ -307,11 +293,8 @@ func createPinPlan(artifacts []DiscoveredArtifact, cfg *config.Config, lockFile 
 		// Deploy action only for non-libraries
 		if !artifact.Artifact.IsLib {
 			var deploySteps []config.Step
-			for _, t := range cfg.Targets {
-				if t.Name == artifact.Artifact.Target {
-					deploySteps = t.Deploy
-					break
-				}
+			if t, ok := cfg.Targets[artifact.Artifact.Target]; ok {
+				deploySteps = t.Steps
 			}
 
 			if len(deploySteps) > 0 {

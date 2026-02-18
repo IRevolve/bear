@@ -1,7 +1,0 @@
-name: order-api
-target: cloudrun
-depends_on:
-  - shared-go
-  - user-api
-params:
-  MEMORY: 512Mi

@@ -14,7 +14,7 @@ type DiscoveredArtifact struct {
 	Language string
 }
 
-// ScanArtifacts recursively scans a directory for bear.artifact.yml and bear.lib.yml files
+// ScanArtifacts recursively scans a directory for bear.artifact.toml and bear.lib.toml files
 func ScanArtifacts(rootPath string, cfg *config.Config) ([]DiscoveredArtifact, error) {
 	var artifacts []DiscoveredArtifact
 
@@ -27,8 +27,8 @@ func ScanArtifacts(rootPath string, cfg *config.Config) ([]DiscoveredArtifact, e
 			return nil
 		}
 
-		isLib := d.Name() == "bear.lib.yml"
-		isArtifact := d.Name() == "bear.artifact.yml"
+		isLib := d.Name() == "bear.lib.toml"
+		isArtifact := d.Name() == "bear.artifact.toml"
 
 		if isArtifact {
 			artifact, err := config.LoadArtifact(path)
@@ -71,12 +71,12 @@ func ScanArtifacts(rootPath string, cfg *config.Config) ([]DiscoveredArtifact, e
 }
 
 // detectLanguage detects the language of a directory based on detection rules
-func detectLanguage(dir string, languages []config.Language) string {
-	for _, lang := range languages {
+func detectLanguage(dir string, languages map[string]config.Language) string {
+	for name, lang := range languages {
 		// Check if one of the detection files exists
 		for _, file := range lang.Detection.Files {
 			if _, err := os.Stat(filepath.Join(dir, file)); err == nil {
-				return lang.Name
+				return name
 			}
 		}
 
@@ -84,7 +84,7 @@ func detectLanguage(dir string, languages []config.Language) string {
 		if lang.Detection.Pattern != "" {
 			matches, err := filepath.Glob(filepath.Join(dir, lang.Detection.Pattern))
 			if err == nil && len(matches) > 0 {
-				return lang.Name
+				return name
 			}
 		}
 	}

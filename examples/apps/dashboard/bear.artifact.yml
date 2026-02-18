@@ -1,9 +1,0 @@
-name: dashboard
-target: s3-static
-depends_on:
-  - ui-components
-  - user-api
-  - order-api
-params:
-  BUCKET: acme-dashboard-prod
-  CF_DIST: E1ABCDEFGHIJ

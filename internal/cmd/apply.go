@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/irevolve/bear/internal"
 	"github.com/irevolve/bear/internal/config"
 )
 
@@ -38,7 +39,7 @@ func ApplyWithOptions(configPath string, opts Options) error {
 	}
 
 	// Check if HEAD has moved since plan was created
-	currentCommit := getCurrentCommit(rootPath)
+	currentCommit := internal.GetCurrentCommit(rootPath)
 	if currentCommit != "" && planFile.Commit != "" && currentCommit != planFile.Commit {
 		p.Warning(fmt.Sprintf("HEAD has moved since plan was created (plan: %s, current: %s)",
 			planFile.Commit[:min(7, len(planFile.Commit))],
@@ -51,7 +52,7 @@ func ApplyWithOptions(configPath string, opts Options) error {
 	p.BearHeader("Apply")
 
 	// Load lock file for updates
-	lockPath := filepath.Join(rootPath, "bear.lock.yml")
+	lockPath := filepath.Join(rootPath, "bear.lock.toml")
 	lockFile, err := config.LoadLock(lockPath)
 	if err != nil {
 		return fmt.Errorf("error loading lock file: %w", err)
@@ -73,7 +74,7 @@ func ApplyWithOptions(configPath string, opts Options) error {
 
 		for _, step := range artifact.Steps {
 			var stdout, stderr bytes.Buffer
-			execErr := ExecuteStep(ctx, step.Run, artifact.Path, artifact.Params, &stdout, &stderr)
+			execErr := ExecuteStep(ctx, step.Run, artifact.Path, artifact.Vars, &stdout, &stderr)
 
 			if opts.Verbose {
 				combinedOutput.WriteString(fmt.Sprintf("  → %s\n", step.Name))
@@ -180,17 +181,6 @@ func ApplyWithOptions(configPath string, opts Options) error {
 	}
 
 	return nil
-}
-
-// getCurrentCommit returns the current HEAD commit hash
-func getCurrentCommit(rootPath string) string {
-	cmd := exec.Command("git", "rev-parse", "HEAD")
-	cmd.Dir = rootPath
-	out, err := cmd.Output()
-	if err != nil {
-		return ""
-	}
-	return strings.TrimSpace(string(out))
 }
 
 // commitLockFile commits the lock file with [skip ci] to prevent CI loops

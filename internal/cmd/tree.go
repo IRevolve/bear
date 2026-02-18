@@ -30,7 +30,7 @@ func Tree(configPath string, filterArtifacts []string) error {
 	}
 
 	// Load lock file for status info
-	lockPath := filepath.Join(rootPath, "bear.lock.yml")
+	lockPath := filepath.Join(rootPath, "bear.lock.toml")
 	lockFile, _ := config.LoadLock(lockPath)
 
 	// Build artifact map
@@ -42,7 +42,7 @@ func Tree(configPath string, filterArtifacts []string) error {
 	// Build reverse dependency map (who depends on me?)
 	dependents := make(map[string][]string)
 	for _, a := range artifacts {
-		for _, dep := range a.Artifact.DependsOn {
+		for _, dep := range a.Artifact.Depends {
 			dependents[dep] = append(dependents[dep], a.Artifact.Name)
 		}
 	}
@@ -124,8 +124,8 @@ func printFullDependencyTree(p *Printer, artifacts []internal.DiscoveredArtifact
 			p.Printf("   %s%s%s\n", p.bold(a.Artifact.Name), target, status)
 
 			// Dependencies
-			if len(a.Artifact.DependsOn) > 0 {
-				deps := a.Artifact.DependsOn
+			if len(a.Artifact.Depends) > 0 {
+				deps := a.Artifact.Depends
 				sort.Strings(deps)
 				for i, dep := range deps {
 					connector := "├─"
@@ -172,7 +172,7 @@ func printArtifactTree(p *Printer, a internal.DiscoveredArtifact, artifactMap ma
 	}
 
 	// Print dependencies
-	deps := a.Artifact.DependsOn
+	deps := a.Artifact.Depends
 	if len(deps) > 0 {
 		sort.Strings(deps)
 		for i, depName := range deps {

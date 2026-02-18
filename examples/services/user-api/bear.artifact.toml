@@ -1,0 +1,6 @@
+name = "user-api"
+target = "cloudrun"
+depends = ["shared-go"]
+
+[vars]
+MEMORY = "1Gi"

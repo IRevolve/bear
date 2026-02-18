@@ -1,0 +1,5 @@
+name = "stripe-webhook"
+target = "lambda"
+
+[vars]
+HANDLER = "handler.main"

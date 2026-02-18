@@ -82,7 +82,7 @@ func PlanWithOptions(configPath string, opts Options) error {
 
 			for _, step := range v.Steps {
 				var stdout, stderr bytes.Buffer
-				execErr := ExecuteStep(ctx, step.Run, v.Artifact.Path, v.Artifact.Artifact.Params, &stdout, &stderr)
+				execErr := ExecuteStep(ctx, step.Run, v.Artifact.Path, mergeVars(cfg, v.Artifact.Artifact.Target, v.Artifact.Language, v.Artifact.Artifact.Vars), &stdout, &stderr)
 
 				if opts.Verbose {
 					combinedOutput.WriteString(fmt.Sprintf("  → %s\n", step.Name))
@@ -140,9 +140,9 @@ func PlanWithOptions(configPath string, opts Options) error {
 	planFile.Validated = len(validates)
 
 	for _, d := range deploys {
-		params := mergeParams(cfg, d.Artifact.Artifact.Target, d.Artifact.Artifact.Params)
-		params["NAME"] = d.Artifact.Artifact.Name
-		params["VERSION"] = deployVersion[:min(7, len(deployVersion))]
+		vars := mergeVars(cfg, d.Artifact.Artifact.Target, d.Artifact.Language, d.Artifact.Artifact.Vars)
+		vars["NAME"] = d.Artifact.Artifact.Name
+		vars["VERSION"] = deployVersion[:min(7, len(deployVersion))]
 
 		pa := config.PlanArtifact{
 			Name:         d.Artifact.Artifact.Name,
@@ -152,7 +152,7 @@ func PlanWithOptions(configPath string, opts Options) error {
 			Action:       "deploy",
 			Reason:       d.Reason,
 			ChangedFiles: d.ChangedFiles,
-			Params:       params,
+			Vars:         vars,
 			Steps:        d.Steps,
 			IsLib:        d.Artifact.Artifact.IsLib,
 		}
@@ -264,23 +264,27 @@ func printValidatedPlan(p *Printer, plan *internal.Plan, planFile *config.PlanFi
 	}
 }
 
-func mergeParams(cfg *config.Config, targetName string, artifactParams map[string]string) map[string]string {
-	params := make(map[string]string)
+func mergeVars(cfg *config.Config, targetName string, langName string, artifactVars map[string]string) map[string]string {
+	vars := make(map[string]string)
 
-	// Find target template and apply defaults
-	for _, t := range cfg.Targets {
-		if t.Name == targetName {
-			for k, v := range t.Defaults {
-				params[k] = v
-			}
-			break
+	// 1. Language vars (lowest priority)
+	if lang, ok := cfg.Languages[langName]; ok {
+		for k, v := range lang.Vars {
+			vars[k] = v
 		}
 	}
 
-	// Override with artifact params
-	for k, v := range artifactParams {
-		params[k] = v
+	// 2. Target vars
+	if t, ok := cfg.Targets[targetName]; ok {
+		for k, v := range t.Vars {
+			vars[k] = v
+		}
 	}
 
-	return params
+	// 3. Artifact vars (highest priority)
+	for k, v := range artifactVars {
+		vars[k] = v
+	}
+
+	return vars
 }

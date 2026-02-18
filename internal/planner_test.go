@@ -8,23 +8,23 @@ import (
 
 func TestGetValidationSteps(t *testing.T) {
 	cfg := &config.Config{
-		Languages: []config.Language{
-			{
+		Languages: map[string]config.Language{
+			"go": {
 				Name: "go",
-				Validation: config.Validation{
-					Setup: []config.Step{{Name: "Download", Run: "go mod download"}},
-					Lint:  []config.Step{{Name: "Vet", Run: "go vet ./..."}},
-					Test:  []config.Step{{Name: "Test", Run: "go test ./..."}},
-					Build: []config.Step{{Name: "Build", Run: "go build ."}},
+				Steps: []config.Step{
+					{Name: "Download", Run: "go mod download"},
+					{Name: "Vet", Run: "go vet ./..."},
+					{Name: "Test", Run: "go test ./..."},
+					{Name: "Build", Run: "go build ."},
 				},
 			},
-			{
+			"node": {
 				Name: "node",
-				Validation: config.Validation{
-					Setup: []config.Step{{Name: "Install", Run: "npm install"}},
-					Lint:  []config.Step{{Name: "Lint", Run: "npm run lint"}},
-					Test:  []config.Step{{Name: "Test", Run: "npm test"}},
-					Build: []config.Step{{Name: "Build", Run: "npm run build"}},
+				Steps: []config.Step{
+					{Name: "Install", Run: "npm install"},
+					{Name: "Lint", Run: "npm run lint"},
+					{Name: "Test", Run: "npm test"},
+					{Name: "Build", Run: "npm run build"},
 				},
 			},
 		},
@@ -80,31 +80,31 @@ func TestFilterArtifacts(t *testing.T) {
 
 	tests := []struct {
 		name          string
-		targets       []string
+		names         []string
 		expectedCount int
 		expectedNames []string
 	}{
 		{
-			name:          "empty targets returns all",
-			targets:       []string{},
+			name:          "empty names returns all",
+			names:         []string{},
 			expectedCount: 3,
 			expectedNames: []string{"user-api", "dashboard", "shared-lib"},
 		},
 		{
-			name:          "single target",
-			targets:       []string{"user-api"},
+			name:          "single name",
+			names:         []string{"user-api"},
 			expectedCount: 1,
 			expectedNames: []string{"user-api"},
 		},
 		{
-			name:          "multiple targets",
-			targets:       []string{"user-api", "dashboard"},
+			name:          "multiple names",
+			names:         []string{"user-api", "dashboard"},
 			expectedCount: 2,
 			expectedNames: []string{"user-api", "dashboard"},
 		},
 		{
-			name:          "non-existent target",
-			targets:       []string{"nonexistent"},
+			name:          "non-existent name",
+			names:         []string{"nonexistent"},
 			expectedCount: 0,
 			expectedNames: []string{},
 		},
@@ -112,7 +112,7 @@ func TestFilterArtifacts(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := filterArtifacts(artifacts, tt.targets)
+			result := filterArtifacts(artifacts, tt.names)
 
 			if len(result) != tt.expectedCount {
 				t.Errorf("expected %d artifacts, got %d", tt.expectedCount, len(result))
@@ -132,7 +132,6 @@ func TestIsArtifactAffected(t *testing.T) {
 		name         string
 		artifactPath string
 		changedFiles []ChangedFile
-		affectedDirs map[string]bool
 		expectHit    bool
 		expectCount  int
 	}{
@@ -140,7 +139,6 @@ func TestIsArtifactAffected(t *testing.T) {
 			name:         "no changes",
 			artifactPath: "services/api",
 			changedFiles: []ChangedFile{},
-			affectedDirs: map[string]bool{},
 			expectHit:    false,
 			expectCount:  0,
 		},
@@ -150,7 +148,6 @@ func TestIsArtifactAffected(t *testing.T) {
 			changedFiles: []ChangedFile{
 				{Path: "services/api/main.go"},
 			},
-			affectedDirs: map[string]bool{"services/api": true, "services": true},
 			expectHit:    true,
 			expectCount:  1,
 		},
@@ -160,7 +157,6 @@ func TestIsArtifactAffected(t *testing.T) {
 			changedFiles: []ChangedFile{
 				{Path: "services/api/handlers/user.go"},
 			},
-			affectedDirs: map[string]bool{"services/api/handlers": true, "services/api": true, "services": true},
 			expectHit:    true,
 			expectCount:  1,
 		},
@@ -170,7 +166,6 @@ func TestIsArtifactAffected(t *testing.T) {
 			changedFiles: []ChangedFile{
 				{Path: "services/web/main.go"},
 			},
-			affectedDirs: map[string]bool{"services/web": true, "services": true},
 			expectHit:    false,
 			expectCount:  0,
 		},
@@ -182,7 +177,6 @@ func TestIsArtifactAffected(t *testing.T) {
 				{Path: "services/api/handlers/user.go"},
 				{Path: "services/web/main.go"},
 			},
-			affectedDirs: map[string]bool{},
 			expectHit:    true,
 			expectCount:  2,
 		},
@@ -190,7 +184,7 @@ func TestIsArtifactAffected(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			affected, files := isArtifactAffected(tt.artifactPath, tt.changedFiles, tt.affectedDirs)
+			affected, files := isArtifactAffected(tt.artifactPath, tt.changedFiles)
 
 			if affected != tt.expectHit {
 				t.Errorf("expected affected=%v, got %v", tt.expectHit, affected)

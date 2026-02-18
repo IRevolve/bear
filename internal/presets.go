@@ -61,15 +61,15 @@ func (m *Manager) GetLanguage(name string) (config.Language, error) {
 }
 
 // GetTarget loads a target preset
-func (m *Manager) GetTarget(name string) (config.TargetTemplate, error) {
+func (m *Manager) GetTarget(name string) (config.Target, error) {
 	data, err := m.fetchPreset("targets", name)
 	if err != nil {
-		return config.TargetTemplate{}, err
+		return config.Target{}, err
 	}
 
-	var target config.TargetTemplate
+	var target config.Target
 	if err := yaml.Unmarshal(data, &target); err != nil {
-		return config.TargetTemplate{}, fmt.Errorf("failed to parse target preset %s: %w", name, err)
+		return config.Target{}, fmt.Errorf("failed to parse target preset %s: %w", name, err)
 	}
 
 	return target, nil

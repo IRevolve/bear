@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"sort"
 	"strings"
 	"sync"
 
@@ -61,14 +62,21 @@ func RunParallel(ctx context.Context, concurrency int, count int, f func(ctx con
 }
 
 // ExecuteStep runs a single step command in the given working directory.
-// Parameters are substituted in the command string.
+// Variables are substituted in the command string.
 // Output is written to the provided writers.
-func ExecuteStep(ctx context.Context, stepRun string, workDir string, params map[string]string, stdout, stderr *bytes.Buffer) error {
-	// Replace parameters in the run command
+func ExecuteStep(ctx context.Context, stepRun string, workDir string, vars map[string]string, stdout, stderr *bytes.Buffer) error {
+	// Replace variables in the run command
+	// Sort keys by length (longest first) so $NAMESPACE is replaced before $NAME
 	command := stepRun
-	for key, value := range params {
+	keys := make([]string, 0, len(vars))
+	for key := range vars {
+		keys = append(keys, key)
+	}
+	sort.Slice(keys, func(i, j int) bool { return len(keys[i]) > len(keys[j]) })
+	for _, key := range keys {
+		value := vars[key]
+		command = strings.ReplaceAll(command, "${" +key+"}", value)
 		command = strings.ReplaceAll(command, "$"+key, value)
-		command = strings.ReplaceAll(command, "${"+key+"}", value)
 	}
 
 	// Detect shell based on OS
@@ -92,11 +100,17 @@ func ExecuteStep(ctx context.Context, stepRun string, workDir string, params map
 }
 
 // ExecuteStepDirect runs a step with output directly to os.Stdout/os.Stderr (for verbose mode).
-func ExecuteStepDirect(ctx context.Context, stepRun string, workDir string, params map[string]string) error {
+func ExecuteStepDirect(ctx context.Context, stepRun string, workDir string, vars map[string]string) error {
 	command := stepRun
-	for key, value := range params {
-		command = strings.ReplaceAll(command, "$"+key, value)
+	keys := make([]string, 0, len(vars))
+	for key := range vars {
+		keys = append(keys, key)
+	}
+	sort.Slice(keys, func(i, j int) bool { return len(keys[i]) > len(keys[j]) })
+	for _, key := range keys {
+		value := vars[key]
 		command = strings.ReplaceAll(command, "${"+key+"}", value)
+		command = strings.ReplaceAll(command, "$"+key, value)
 	}
 
 	shell, shellArg := getShell()

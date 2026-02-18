@@ -6,12 +6,10 @@ Bear tracks dependencies between artifacts and automatically rebuilds dependents
 
 In your artifact config, list dependencies by name:
 
-```yaml title="services/api/bear.artifact.yml"
-name: api
-target: cloudrun
-depends:
-  - shared-lib
-  - auth-lib
+```toml title="services/api/bear.artifact.toml"
+name = "api"
+target = "cloudrun"
+depends = ["shared-lib", "auth-lib"]
 ```
 
 ## Transitive Resolution
@@ -36,8 +34,8 @@ When C changes:
 
 | Type | Validated | Deployed |
 |------|-----------|----------|
-| Library (`bear.lib.yml`) | ✓ | ✗ |
-| Service (`bear.artifact.yml`) | ✓ | ✓ |
+| Library (`bear.lib.toml`) | ✓ | ✗ |
+| Service (`bear.artifact.toml`) | ✓ | ✓ |
 
 Libraries are validate-only. They exist to:
 
@@ -49,11 +47,11 @@ Libraries are validate-only. They exist to:
 ```
 my-monorepo/
 ├── libs/
-│   ├── shared/           # bear.lib.yml: shared-lib
-│   └── auth/             # bear.lib.yml: auth-lib (depends: shared-lib)
+│   ├── shared/           # bear.lib.toml: shared-lib
+│   └── auth/             # bear.lib.toml: auth-lib (depends: shared-lib)
 └── services/
-    ├── api/              # bear.artifact.yml: api (depends: shared-lib, auth-lib)
-    └── worker/           # bear.artifact.yml: worker (depends: shared-lib)
+    ├── api/              # bear.artifact.toml: api (depends: shared-lib, auth-lib)
+    └── worker/           # bear.artifact.toml: worker (depends: shared-lib)
 ```
 
 Dependency graph:

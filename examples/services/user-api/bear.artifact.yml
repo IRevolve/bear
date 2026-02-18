@@ -1,6 +1,0 @@
-name: user-api
-target: cloudrun
-depends_on:
-  - shared-go
-params:
-  MEMORY: 1Gi

@@ -1,4 +1,0 @@
-name: stripe-webhook
-target: lambda
-params:
-  HANDLER: handler.main

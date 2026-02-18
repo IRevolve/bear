@@ -20,7 +20,7 @@ var (
 var initCmd = &cobra.Command{
 	Use:   "init",
 	Short: "Initialize a new Bear project",
-	Long: `Creates a new bear.config.yml in the current directory.
+	Long: `Creates a new bear.config.toml in the current directory.
 
 Uses the folder name as project name and imports the specified
 language and target presets.
@@ -44,14 +44,14 @@ Examples:
 			return fmt.Errorf("invalid path: %w", err)
 		}
 
-		configPath := filepath.Join(absDir, "bear.config.yml")
+		configPath := filepath.Join(absDir, "bear.config.toml")
 
 		// Check if already exists
 		if _, err := os.Stat(configPath); err == nil && !initForce {
 			return fmt.Errorf("config file already exists: %s (use --force to overwrite)", configPath)
 		}
 
-		// Verwende Ordnername als Projektname
+		// Use folder name as project name
 		projectName := filepath.Base(absDir)
 
 		manager := internal.NewManager()
@@ -107,8 +107,8 @@ Examples:
 
 		fmt.Printf("Created %s\n\n", configPath)
 		fmt.Println("Next steps:")
-		fmt.Println("  1. Add bear.artifact.yml to your services/apps")
-		fmt.Println("  2. Add bear.lib.yml to your libraries")
+		fmt.Println("  1. Add bear.artifact.toml to your services/apps")
+		fmt.Println("  2. Add bear.lib.toml to your libraries")
 		fmt.Println("  3. Run 'bear check' to validate your setup")
 		fmt.Println("  4. Run 'bear plan' to validate and plan deployments")
 		fmt.Println("  5. Run 'bear apply' to execute the plan")
@@ -120,45 +120,42 @@ Examples:
 func generateConfig(name string, languages, targets []string) string {
 	var sb strings.Builder
 
-	sb.WriteString(fmt.Sprintf("name: %s\n", name))
+	sb.WriteString(fmt.Sprintf("name = \"%s\"\n", name))
 
 	// Use section if presets selected
 	if len(languages) > 0 || len(targets) > 0 {
-		sb.WriteString("\nuse:\n")
+		sb.WriteString("\n[use]\n")
 		if len(languages) > 0 {
-			sb.WriteString("  languages:\n")
-			for _, lang := range languages {
-				sb.WriteString(fmt.Sprintf("    - %s\n", lang))
+			quoted := make([]string, len(languages))
+			for i, l := range languages {
+				quoted[i] = fmt.Sprintf("\"%s\"", l)
 			}
+			sb.WriteString(fmt.Sprintf("languages = [%s]\n", strings.Join(quoted, ", ")))
 		}
 		if len(targets) > 0 {
-			sb.WriteString("  targets:\n")
-			for _, target := range targets {
-				sb.WriteString(fmt.Sprintf("    - %s\n", target))
+			quoted := make([]string, len(targets))
+			for i, t := range targets {
+				quoted[i] = fmt.Sprintf("\"%s\"", t)
 			}
+			sb.WriteString(fmt.Sprintf("targets = [%s]\n", strings.Join(quoted, ", ")))
 		}
 	}
 
 	// Example comments for custom extensions
 	sb.WriteString(`
 # Custom languages (optional, extend or override presets)
-# languages:
-#   - name: custom-lang
-#     detection:
-#       files: [custom.config]
-#     validation:
-#       build:
-#         - name: Build
-#           run: custom-build
+# [languages.custom-lang]
+# detection = { files = ["custom.config"] }
+# steps = [
+#   { name = "Build", run = "custom-build" },
+# ]
 
 # Custom targets (optional, extend or override presets)
-# targets:
-#   - name: custom-target
-#     defaults:
-#       PARAM: value
-#     deploy:
-#       - name: Deploy
-#         run: custom-deploy $PARAM
+# [targets.custom-target]
+# vars = { PARAM = "value" }
+# steps = [
+#   { name = "Deploy", run = "custom-deploy $PARAM" },
+# ]
 `)
 
 	return sb.String()
