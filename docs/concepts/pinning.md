@@ -4,19 +4,19 @@ Bear supports pinning artifacts to specific versions to prevent accidental redep
 
 ## Pin an Artifact
 
-Pin an artifact to a specific commit:
+Pin an artifact to a specific commit during planning:
 
 ```bash
-bear apply user-api --pin abc1234
+bear plan user-api --pin abc1234
+bear apply
 ```
 
 This will:
 
-1. Deploy the artifact at commit `abc1234`
-2. Run validation steps
-3. Run deployment steps
-4. Update lock file with that commit
-5. **Pin** the artifact to prevent future deploys
+1. Validate the artifact
+2. Write the plan with the pinned commit
+3. On `bear apply`: deploy the artifact at commit `abc1234`
+4. Update lock file with that commit and mark it as **pinned**
 
 ## What Happens
 
@@ -28,28 +28,29 @@ After pin:
   user-api @ abc1234 (pinned)
 ```
 
-The artifact is now pinned. Future `bear apply` commands will skip it:
+The artifact is now pinned. Future `bear plan` commands will skip it:
 
 ```bash
 bear plan
 
-📌 Pinned (will skip):
-  - user-api (pinned at abc1234)
+  Skipped:
+    user-api            pinned
 ```
 
 ## Unpinning
 
-To allow the artifact to be deployed again:
+To allow the artifact to be deployed again, use `--force`:
 
 ```bash
-bear apply user-api --force
+bear plan user-api --force
+bear apply
 ```
 
 This:
 
 1. Removes the pin
-2. Deploys to the current HEAD
-3. Updates the lock file
+2. Plans a deploy to the current HEAD
+3. On `bear apply`: deploys and updates the lock file
 
 ## Use Cases
 
@@ -58,7 +59,8 @@ This:
 Pin to a previous known-good version:
 
 ```bash
-bear apply user-api --pin abc1234
+bear plan user-api --pin abc1234
+bear apply
 ```
 
 ### Lock Production
@@ -67,10 +69,12 @@ Keep production stable while developing:
 
 ```bash
 # Pin all services to current versions
-bear apply --pin $(git rev-parse HEAD)
+bear plan --pin $(git rev-parse HEAD)
+bear apply
 
 # Later, unpin and deploy
-bear apply --force
+bear plan --force
+bear apply
 ```
 
 ## Finding Commits
@@ -94,7 +98,8 @@ In a CI/CD environment:
 ARTIFACT=$1
 COMMIT=$2
 
-bear apply $ARTIFACT --pin $COMMIT --commit
+bear plan $ARTIFACT --pin $COMMIT
+bear apply
 ```
 
 ## Pin Status in Plan
@@ -103,15 +108,15 @@ bear apply $ARTIFACT --pin $COMMIT --commit
 bear plan
 ```
 
-Shows pinned artifacts:
+Shows pinned artifacts in the skipped section:
 
 ```
-📌 Pinned (will skip):
-  - user-api (pinned at abc1234)
-  - order-api (pinned at def5678)
+  Skipped:
+    user-api            pinned
+    order-api           pinned
 ```
 
 ## See Also
 
 - [Lock File](lock-file.md)
-- [bear apply](../commands/apply.md)
+- [bear plan](../commands/plan.md)

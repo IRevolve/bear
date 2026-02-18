@@ -70,50 +70,48 @@ bear list --tree
 
 ## 6. Plan Changes
 
-See what would be built and deployed:
+Detect changes, validate, and create a deployment plan:
 
 ```bash
 bear plan
 ```
 
+This runs validation (lint, test, build) in parallel and writes the plan to `.bear/plan.yml`.
+
 Example output:
 
 ```
-Bear Execution Plan
-===================
+  BEAR — Plan
+──────────────────────────────────────
 
-🔍 To Validate:
+  Detecting changes...
 
-  + api
-    Path:     services/api
-    Language: go
-    Reason:   files changed
-    Steps:    4
-              - Download modules
-              - Vet
-              - Test
-              - Build
+  Validating 1 artifact (concurrency: 10)
 
-🚀 To Deploy:
+  ✓ api               validated in 8.2s
 
-  ~ api
-    Path:   services/api
-    Target: docker
-    Reason: artifact changed
-    Steps:  2
-            - Build image
-            - Push image
+──────────────────────────────────────
+  Deploy
+──────────────────────────────────────
 
-Plan: 1 to validate, 1 to deploy, 0 unchanged
+  api                 docker     files changed
+
+──────────────────────────────────────
+  Summary: 1 to deploy, 0 unchanged
+
+  Plan written to .bear/plan.yml
+  Run 'bear apply' to execute this plan.
 ```
 
 ## 7. Apply Changes
 
-Execute the plan:
+Execute the deployment plan:
 
 ```bash
 bear apply
 ```
+
+This reads `.bear/plan.yml`, deploys the artifacts, updates the lock file, and auto-commits with `[skip ci]`.
 
 ## Next Steps
 

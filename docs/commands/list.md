@@ -5,18 +5,36 @@ List all discovered artifacts.
 ## Usage
 
 ```bash
-bear list [flags]
+bear list [artifacts...] [flags]
 ```
 
 ## Description
 
 Scans the project for `bear.artifact.yml` and `bear.lib.yml` files and displays all discovered artifacts.
 
+## Arguments
+
+| Argument | Description |
+|----------|-------------|
+| `artifacts` | Optional. Filter tree view to specific artifacts. Only used with `--tree`. |
+
+## Flags
+
+| Flag | Description |
+|------|-------------|
+| `--tree` | Display as dependency tree |
+
 ## Examples
 
 ```bash
 # List all artifacts
 bear list
+
+# Show dependency tree
+bear list --tree
+
+# Show tree for specific artifact
+bear list --tree user-api
 
 # List artifacts in a different directory
 bear list -d ./my-project

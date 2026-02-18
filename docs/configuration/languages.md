@@ -307,4 +307,4 @@ If any step fails:
 
 - [Presets](presets.md) — Pre-built language configurations
 - [Artifacts](artifacts.md) — Language detection in artifacts
-- [bear apply](../commands/apply.md) — Executing validation
+- [bear plan](../commands/plan.md) — Validation and planning

@@ -11,7 +11,7 @@ A Terraform-inspired CI/CD tool for monorepos. Bear detects changes, resolves de
 - 📋 **Plan/Apply workflow** — Review changes before deploying
 - 🔒 **Lock file** — Track deployed versions per artifact
 - 📚 **Library support** — Validate-only artifacts
-- 🔄 **Rollback** — Redeploy any previous version
+- 🔄 **Pinning** — Pin artifacts to specific versions, rollback by pinning to older commits
 - 🌍 **Multi-language** — Go, Node, Python, Rust, Java, TypeScript
 - 🎯 **Many targets** — Docker, CloudRun, Kubernetes, Lambda, S3, Helm
 
@@ -44,16 +44,15 @@ bear apply
 
 ## How It Works
 
-```
-┌─────────────┐     ┌─────────────┐     ┌─────────────┐
-│   Detect    │────▶│    Plan     │────▶│    Apply    │
-│   Changes   │     │  (Review)   │     │  (Execute)  │
-└─────────────┘     └─────────────┘     └─────────────┘
+```mermaid
+flowchart LR
+    A["Detect\nChanges"] --> B["Plan\n(Validate)"]
+    B --> C["Apply\n(Deploy)"]
 ```
 
 1. **Detect** — Compare each artifact against its last deployed commit
-2. **Plan** — Show affected artifacts with their dependencies
-3. **Apply** — Validate (lint, test, build) then deploy
+2. **Plan** — Validate changed artifacts in parallel, write deployment plan
+3. **Apply** — Deploy from the plan, update lock file
 
 ## Getting Started
 

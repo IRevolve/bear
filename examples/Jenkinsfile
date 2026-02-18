@@ -46,10 +46,10 @@ pipeline {
             }
         }
 
-        stage('Validate') {
+        stage('Plan') {
             steps {
-                // Run validation (lint, test) for changed artifacts
-                sh './bear plan --validate'
+                // Detect changes, validate, and create deployment plan
+                sh './bear plan'
             }
         }
 
@@ -65,7 +65,7 @@ pipeline {
                 )]) {
                     sh '''
                         git remote set-url origin https://${GIT_USER}:${GIT_TOKEN}@github.com/your-org/your-repo.git
-                        ./bear apply --commit
+                        ./bear apply
                     '''
                 }
             }

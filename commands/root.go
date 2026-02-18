@@ -18,24 +18,26 @@ var (
 )
 
 var rootCmd = &cobra.Command{
-	Use:     "bear",
-	Short:   "Bear - Build, Evaluate, Apply, Repeat",
-	Version: Version,
+	Use:          "bear",
+	Short:        "Bear - Build, Evaluate, Apply, Repeat",
+	Version:      Version,
+	SilenceUsage: true,
 	Long: `Bear is a CI/CD tool for monorepos that automatically detects
 changes, validates affected artifacts, and deploys them to various targets.
 
-It uses a Terraform-like plan/apply workflow to give you visibility
-and control over what gets deployed.
+It uses a plan/apply workflow to give you visibility and control over
+what gets deployed. Plan validates and creates a deployment plan,
+apply executes it.
 
 Change detection is based on comparing against the last deployed commit
 for each artifact (stored in bear.lock.yml).
 
 Usage:
+  bear check                     Validate configuration and dependencies
   bear list                      List all artifacts
   bear list --tree               Show dependency tree
-  bear plan                      Plan changes for artifacts
-  bear plan --validate           Plan and run validation
-  bear apply                     Apply changes to artifacts`,
+  bear plan                      Validate changes and create deployment plan
+  bear apply                     Execute the deployment plan`,
 }
 
 func Execute() error {

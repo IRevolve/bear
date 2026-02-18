@@ -34,3 +34,10 @@ __pycache__/
 *.pyc
 site/
 .cache/
+
+# Build artifacts
+dist/
+node_modules/
+
+# Bear plan directory
+.bear/

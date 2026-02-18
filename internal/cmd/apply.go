@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"os"
@@ -8,242 +9,210 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/irevolve/bear/internal"
 	"github.com/irevolve/bear/internal/config"
 )
 
 func ApplyWithOptions(configPath string, opts Options) error {
-	// Create context for cancellation support
 	ctx := context.Background()
-
-	cfg, err := internal.Load(configPath)
-	if err != nil {
-		return fmt.Errorf("error loading config: %w", err)
-	}
+	p := NewPrinter()
 
 	rootPath := filepath.Dir(configPath)
 	if rootPath == "." {
 		rootPath, _ = os.Getwd()
 	}
 
-	planOpts := internal.PlanOptions{
-		Artifacts: opts.Artifacts,
-		PinCommit: opts.PinCommit,
-		Force:     opts.Force,
+	// Read plan file — it must exist
+	if !config.PlanExists(rootPath) {
+		return fmt.Errorf("no plan found. Run 'bear plan' first")
 	}
 
-	plan, err := internal.CreatePlanWithOptions(rootPath, cfg, planOpts)
+	planFile, err := config.ReadPlan(rootPath)
 	if err != nil {
-		return fmt.Errorf("error creating plan: %w", err)
+		return fmt.Errorf("error reading plan file: %w", err)
 	}
 
-	if plan.ToValidate == 0 && plan.ToDeploy == 0 {
-		if len(opts.Artifacts) > 0 {
-			fmt.Printf("No artifacts found matching: %v\n", opts.Artifacts)
-		} else {
-			fmt.Println("No changes detected. Nothing to apply.")
-		}
+	if len(planFile.Artifacts) == 0 {
+		p.Println("Plan contains no artifacts to deploy.")
+		config.RemovePlan(rootPath)
 		return nil
 	}
 
-	currentCommit := internal.GetCurrentCommit(rootPath)
-	deployVersion := currentCommit
-
-	// For pin, use the pinned commit for the version
-	if opts.PinCommit != "" {
-		deployVersion = opts.PinCommit
-		fmt.Println()
-		fmt.Println("📌 PIN MODE")
-		fmt.Printf("   Pinning to commit: %s\n", opts.PinCommit[:min(8, len(opts.PinCommit))])
+	// Check if HEAD has moved since plan was created
+	currentCommit := getCurrentCommit(rootPath)
+	if currentCommit != "" && planFile.Commit != "" && currentCommit != planFile.Commit {
+		p.Warning(fmt.Sprintf("HEAD has moved since plan was created (plan: %s, current: %s)",
+			planFile.Commit[:min(7, len(planFile.Commit))],
+			currentCommit[:min(7, len(currentCommit))]))
+		p.Blank()
 	}
 
-	fmt.Println()
-	fmt.Println("Bear Apply")
-	fmt.Println("==========")
-	fmt.Println()
+	deployVersion := planFile.Commit
 
-	// Gruppiere Aktionen
-	var validates, deploys []internal.PlannedAction
-	for _, action := range plan.Actions {
-		switch action.Action {
-		case internal.ActionValidate:
-			validates = append(validates, action)
-		case internal.ActionDeploy:
-			deploys = append(deploys, action)
-		}
+	p.BearHeader("Apply")
+
+	// Load lock file for updates
+	lockPath := filepath.Join(rootPath, "bear.lock.yml")
+	lockFile, err := config.LoadLock(lockPath)
+	if err != nil {
+		return fmt.Errorf("error loading lock file: %w", err)
 	}
 
-	// Phase 1: Validation
-	if len(validates) > 0 {
-		fmt.Printf("📋 Phase 1: Validating %d artifact(s)...\n\n", len(validates))
+	// Deploy all artifacts in parallel
+	p.PhaseHeader(fmt.Sprintf("Deploying %d artifact(s)", len(planFile.Artifacts)))
 
-		for _, v := range validates {
-			fmt.Printf("  🔍 %s\n", v.Artifact.Artifact.Name)
-
-			for _, step := range v.Steps {
-				fmt.Printf("     → %s\n", step.Name)
-
-				if err := executeStep(ctx, step, v.Artifact.Path, v.Artifact.Artifact.Params); err != nil {
-					fmt.Printf("     ❌ Failed: %v\n", err)
-					return fmt.Errorf("validation failed for %s: %w", v.Artifact.Artifact.Name, err)
-				}
-				fmt.Printf("     ✓ Done\n")
-			}
-			fmt.Println()
-		}
-
-		fmt.Println("✅ All validations passed!")
-		fmt.Println()
+	type deployResult struct {
+		name   string
+		output string
+		err    error
 	}
+	results := make([]deployResult, len(planFile.Artifacts))
 
-	// Phase 2: Deployment
-	if len(deploys) > 0 {
-		fmt.Printf("🚀 Phase 2: Deploying %d artifact(s)...\n\n", len(deploys))
+	errs := RunParallel(ctx, opts.Concurrency, len(planFile.Artifacts), func(ctx context.Context, i int) error {
+		artifact := planFile.Artifacts[i]
+		var combinedOutput bytes.Buffer
 
-		for _, d := range deploys {
-			fmt.Printf("  📦 %s → %s\n", d.Artifact.Artifact.Name, d.Artifact.Artifact.Target)
+		for _, step := range artifact.Steps {
+			var stdout, stderr bytes.Buffer
+			execErr := ExecuteStep(ctx, step.Run, artifact.Path, artifact.Params, &stdout, &stderr)
 
-			// Merge target defaults with artifact params
-			params := mergeParams(cfg, d.Artifact.Artifact.Target, d.Artifact.Artifact.Params)
-			params["NAME"] = d.Artifact.Artifact.Name
-			params["VERSION"] = deployVersion[:min(7, len(deployVersion))]
-
-			for _, step := range d.Steps {
-				fmt.Printf("     → %s\n", step.Name)
-
-				if err := executeStep(ctx, step, d.Artifact.Path, params); err != nil {
-					fmt.Printf("     ❌ Failed: %v\n", err)
-					return fmt.Errorf("deployment failed for %s: %w", d.Artifact.Artifact.Name, err)
-				}
-				fmt.Printf("     ✓ Done\n")
+			if opts.Verbose {
+				combinedOutput.WriteString(fmt.Sprintf("  → %s\n", step.Name))
+				combinedOutput.Write(stdout.Bytes())
+				combinedOutput.Write(stderr.Bytes())
 			}
 
-			// Update lock file after successful deployment
-			// For pin, the artifact is pinned (unless with --force)
-			if opts.PinCommit != "" && !opts.Force {
-				plan.LockFile.UpdateArtifactPinned(
-					d.Artifact.Artifact.Name,
-					deployVersion,
-					d.Artifact.Artifact.Target,
-					deployVersion[:min(7, len(deployVersion))],
-				)
+			if execErr != nil {
+				combinedOutput.Write(stdout.Bytes())
+				combinedOutput.Write(stderr.Bytes())
+				results[i] = deployResult{
+					name:   artifact.Name,
+					output: combinedOutput.String(),
+					err:    fmt.Errorf("%s: %w", step.Name, execErr),
+				}
+				return execErr
+			}
+		}
+
+		results[i] = deployResult{
+			name:   artifact.Name,
+			output: combinedOutput.String(),
+		}
+		return nil
+	})
+
+	// Print results in order and update lock file for successful deployments
+	var failures []string
+	deployed := 0
+	for i, res := range results {
+		artifact := planFile.Artifacts[i]
+		if res.err != nil {
+			p.FailureWithOutput(fmt.Sprintf("%s → %s — %s", res.name, artifact.Target, res.err), res.output)
+			failures = append(failures, res.name)
+		} else {
+			p.Success(fmt.Sprintf("%s → %s", res.name, artifact.Target))
+			if opts.Verbose && res.output != "" {
+				p.ErrorBox(res.output)
+			}
+			deployed++
+
+			// Update lock file
+			version := deployVersion[:min(7, len(deployVersion))]
+			if artifact.Pinned {
+				pinCommit := artifact.PinCommit
+				if pinCommit == "" {
+					pinCommit = deployVersion
+				}
+				lockFile.UpdateArtifactPinned(artifact.Name, pinCommit, artifact.Target, version)
 			} else {
-				// Normal update or --force: pin is removed
-				plan.LockFile.UpdateArtifact(
-					d.Artifact.Artifact.Name,
-					deployVersion,
-					d.Artifact.Artifact.Target,
-					deployVersion[:min(7, len(deployVersion))],
-				)
+				lockFile.UpdateArtifact(artifact.Name, deployVersion, artifact.Target, version)
 			}
-
-			fmt.Println()
 		}
+	}
 
-		// Save lock file
-		if err := plan.LockFile.Save(plan.LockPath); err != nil {
+	failedErrs := CollectErrors(errs)
+	if len(failedErrs) > 0 {
+		p.Blank()
+		p.Printf("  %s\n", p.red(fmt.Sprintf("Deployment failed for: %s", strings.Join(failures, ", "))))
+	}
+
+	// Save lock file (even if some failed, save successful ones)
+	if deployed > 0 {
+		if err := lockFile.Save(lockPath); err != nil {
 			return fmt.Errorf("error saving lock file: %w", err)
 		}
-		fmt.Printf("📝 Lock file updated: %s\n", plan.LockPath)
+		p.Blank()
+		p.Printf("  %s %s\n", p.dim("Lock file updated:"), p.dim(lockPath))
 
-		// Automatically commit with [skip ci]
-		if opts.Commit {
-			if err := commitLockFile(rootPath, plan.LockPath, deploys); err != nil {
-				fmt.Printf("⚠️  Warning: Failed to commit lock file: %v\n", err)
+		// Auto-commit (default behavior, disabled with --no-commit)
+		if !opts.NoCommit {
+			var deployedArtifacts []config.PlanArtifact
+			for i, a := range planFile.Artifacts {
+				if results[i].err == nil {
+					deployedArtifacts = append(deployedArtifacts, a)
+				}
+			}
+			if err := commitLockFile(rootPath, lockPath, deployedArtifacts); err != nil {
+				p.Warning(fmt.Sprintf("Failed to commit lock file: %v", err))
 			} else {
-				fmt.Println("📤 Lock file committed with [skip ci]")
+				p.Printf("  %s\n", p.dim("Lock file committed with [skip ci]"))
 			}
 		}
-		fmt.Println()
-
-		fmt.Println("✅ All deployments completed!")
 	}
 
-	fmt.Println()
-	fmt.Println("─────────────────────────────────")
-	fmt.Printf("Applied: %d validated, %d deployed\n", len(validates), len(deploys))
+	// Remove plan file after apply
+	config.RemovePlan(rootPath)
+
+	// Summary
+	parts := []string{}
+	if deployed > 0 {
+		parts = append(parts, p.SummaryDeployed(deployed))
+	}
+	if len(failures) > 0 {
+		parts = append(parts, p.SummaryFailed(len(failures)))
+	}
+	if planFile.TotalSkips > 0 {
+		parts = append(parts, p.SummarySkipped(planFile.TotalSkips))
+	}
+	p.Summary(parts...)
+
+	if len(failedErrs) > 0 {
+		return fmt.Errorf("deployment failed for %d artifact(s)", len(failedErrs))
+	}
 
 	return nil
 }
 
-func executeStep(ctx context.Context, step config.Step, workDir string, params map[string]string) error {
-	// Replace parameters in the run command
-	command := step.Run
-	for key, value := range params {
-		command = strings.ReplaceAll(command, "$"+key, value)
-		command = strings.ReplaceAll(command, "${"+key+"}", value)
+// getCurrentCommit returns the current HEAD commit hash
+func getCurrentCommit(rootPath string) string {
+	cmd := exec.Command("git", "rev-parse", "HEAD")
+	cmd.Dir = rootPath
+	out, err := cmd.Output()
+	if err != nil {
+		return ""
 	}
-
-	// Detect shell based on OS
-	shell, shellArg := getShell()
-
-	// Execute the command with context for cancellation support
-	cmd := exec.CommandContext(ctx, shell, shellArg, command)
-	cmd.Dir = workDir
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-
-	return cmd.Run()
-}
-
-// getShell returns the appropriate shell and argument for the current OS
-func getShell() (string, string) {
-	if isWindows() {
-		return "cmd", "/C"
-	}
-	return "sh", "-c"
-}
-
-// isWindows checks if the current OS is Windows
-func isWindows() bool {
-	return os.PathSeparator == '\\' && os.PathListSeparator == ';'
-}
-
-func mergeParams(cfg *config.Config, targetName string, artifactParams map[string]string) map[string]string {
-	params := make(map[string]string)
-
-	// Find target template and apply defaults
-	for _, t := range cfg.Targets {
-		if t.Name == targetName {
-			for k, v := range t.Defaults {
-				params[k] = v
-			}
-			break
-		}
-	}
-
-	// Override with artifact params
-	for k, v := range artifactParams {
-		params[k] = v
-	}
-
-	return params
+	return strings.TrimSpace(string(out))
 }
 
 // commitLockFile commits the lock file with [skip ci] to prevent CI loops
-func commitLockFile(rootPath, lockPath string, deploys []internal.PlannedAction) error {
-	// Build commit message
+func commitLockFile(rootPath, lockPath string, deployed []config.PlanArtifact) error {
 	var names []string
-	for _, d := range deploys {
-		names = append(names, d.Artifact.Artifact.Name)
+	for _, d := range deployed {
+		names = append(names, d.Name)
 	}
 	msg := fmt.Sprintf("chore(bear): update lock file [skip ci]\n\nDeployed: %s", strings.Join(names, ", "))
 
-	// Git add
 	addCmd := exec.Command("git", "add", lockPath)
 	addCmd.Dir = rootPath
 	if err := addCmd.Run(); err != nil {
 		return fmt.Errorf("git add failed: %w", err)
 	}
 
-	// Git commit
 	commitCmd := exec.Command("git", "commit", "-m", msg)
 	commitCmd.Dir = rootPath
 	if err := commitCmd.Run(); err != nil {
 		return fmt.Errorf("git commit failed: %w", err)
 	}
 
-	// Git push
 	pushCmd := exec.Command("git", "push")
 	pushCmd.Dir = rootPath
 	if err := pushCmd.Run(); err != nil {

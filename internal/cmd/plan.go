@@ -1,9 +1,10 @@
 package cmd
 
 import (
+	"bytes"
+	"context"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -12,6 +13,9 @@ import (
 )
 
 func PlanWithOptions(configPath string, opts Options) error {
+	ctx := context.Background()
+	p := NewPrinter()
+
 	cfg, err := internal.Load(configPath)
 	if err != nil {
 		return fmt.Errorf("error loading config: %w", err)
@@ -33,100 +37,8 @@ func PlanWithOptions(configPath string, opts Options) error {
 		return fmt.Errorf("error creating plan: %w", err)
 	}
 
-	printPlan(plan, rootPath, opts)
-
-	// Run validation if --validate flag is set
-	if opts.Validate && (plan.ToValidate > 0 || plan.ToDeploy > 0) {
-		fmt.Println()
-		fmt.Println("🔍 Running validation...")
-		fmt.Println()
-
-		for _, action := range plan.Actions {
-			if action.Action == internal.ActionSkip {
-				continue
-			}
-
-			fmt.Printf("  → %s\n", action.Artifact.Artifact.Name)
-
-			for _, step := range action.Steps {
-				// Only run validation steps (lint, test, check)
-				if !isValidationStep(step.Name) {
-					continue
-				}
-
-				fmt.Printf("    • %s\n", step.Name)
-
-				if err := executeValidationStep(step, action.Artifact.Path, action.Artifact.Artifact.Params, cfg); err != nil {
-					fmt.Printf("    ❌ Failed: %v\n", err)
-					return fmt.Errorf("validation failed for %s: %w", action.Artifact.Artifact.Name, err)
-				}
-				fmt.Printf("    ✓ Passed\n")
-			}
-		}
-
-		fmt.Println()
-		fmt.Println("✅ All validations passed!")
-	}
-
-	return nil
-}
-
-// isValidationStep checks if a step name indicates a validation step
-func isValidationStep(name string) bool {
-	name = strings.ToLower(name)
-	return strings.Contains(name, "lint") ||
-		strings.Contains(name, "test") ||
-		strings.Contains(name, "check") ||
-		strings.Contains(name, "validate") ||
-		strings.Contains(name, "vet") ||
-		strings.Contains(name, "fmt")
-}
-
-// executeValidationStep runs a validation step
-func executeValidationStep(step config.Step, workDir string, params map[string]string, cfg *config.Config) error {
-	cmd := step.Run
-
-	// Replace params in command
-	for key, value := range params {
-		cmd = strings.ReplaceAll(cmd, fmt.Sprintf("${%s}", key), value)
-		cmd = strings.ReplaceAll(cmd, fmt.Sprintf("$%s", key), value)
-	}
-
-	// Execute
-	execCmd := exec.Command("sh", "-c", cmd)
-	execCmd.Dir = workDir
-	execCmd.Stdout = os.Stdout
-	execCmd.Stderr = os.Stderr
-
-	return execCmd.Run()
-}
-
-func printPlan(plan *internal.Plan, rootPath string, opts Options) {
-	fmt.Println()
-	if opts.PinCommit != "" {
-		fmt.Println("Bear Pin Plan")
-		fmt.Println("=============")
-	} else {
-		fmt.Println("Bear Execution Plan")
-		fmt.Println("===================")
-	}
-	fmt.Println()
-
-	if len(opts.Artifacts) > 0 {
-		fmt.Printf("🎯 Artifacts: %s\n\n", strings.Join(opts.Artifacts, ", "))
-	}
-
-	if opts.PinCommit != "" {
-		fmt.Printf("📌 Pinning to: %s\n\n", opts.PinCommit)
-	}
-
-	if plan.TotalChanges > 0 {
-		fmt.Printf("📊 %d file(s) changed\n\n", plan.TotalChanges)
-	}
-
-	// Group by action type
+	// Group actions
 	var validates, deploys, skips []internal.PlannedAction
-
 	for _, action := range plan.Actions {
 		switch action.Action {
 		case internal.ActionValidate:
@@ -138,95 +50,237 @@ func printPlan(plan *internal.Plan, rootPath string, opts Options) {
 		}
 	}
 
-	// Show validations
+	if len(validates) == 0 && len(deploys) == 0 {
+		if len(opts.Artifacts) > 0 {
+			p.Printf("No artifacts found matching: %v\n", opts.Artifacts)
+		} else {
+			p.Println("No changes detected. Nothing to plan.")
+		}
+		return nil
+	}
+
+	currentCommit := internal.GetCurrentCommit(rootPath)
+	deployVersion := currentCommit
+	if opts.PinCommit != "" {
+		deployVersion = opts.PinCommit
+	}
+
+	// Phase 1: Validate all changed artifacts in parallel
 	if len(validates) > 0 {
-		fmt.Println("🔍 To Validate:")
-		fmt.Println()
-		for _, v := range validates {
-			relPath, _ := filepath.Rel(rootPath, v.Artifact.Path)
-			fmt.Printf("  + %s\n", v.Artifact.Artifact.Name)
-			fmt.Printf("    Path:     %s\n", relPath)
-			fmt.Printf("    Language: %s\n", v.Artifact.Language)
-			fmt.Printf("    Reason:   %s\n", v.Reason)
-			if len(v.ChangedFiles) > 0 && len(v.ChangedFiles) <= 5 {
-				fmt.Printf("    Changed:  %s\n", strings.Join(v.ChangedFiles, ", "))
-			} else if len(v.ChangedFiles) > 5 {
-				fmt.Printf("    Changed:  %d files\n", len(v.ChangedFiles))
-			}
-			if len(v.Steps) > 0 {
-				fmt.Printf("    Steps:    %d\n", len(v.Steps))
-				for _, step := range v.Steps {
-					fmt.Printf("              - %s\n", step.Name)
+		p.PhaseHeader(fmt.Sprintf("Validating %d artifact(s)", len(validates)))
+
+		type valResult struct {
+			name   string
+			output string
+			err    error
+		}
+		results := make([]valResult, len(validates))
+
+		errs := RunParallel(ctx, opts.Concurrency, len(validates), func(ctx context.Context, i int) error {
+			v := validates[i]
+			var combinedOutput bytes.Buffer
+
+			for _, step := range v.Steps {
+				var stdout, stderr bytes.Buffer
+				execErr := ExecuteStep(ctx, step.Run, v.Artifact.Path, v.Artifact.Artifact.Params, &stdout, &stderr)
+
+				if opts.Verbose {
+					combinedOutput.WriteString(fmt.Sprintf("  → %s\n", step.Name))
+					combinedOutput.Write(stdout.Bytes())
+					combinedOutput.Write(stderr.Bytes())
+				}
+
+				if execErr != nil {
+					combinedOutput.Write(stdout.Bytes())
+					combinedOutput.Write(stderr.Bytes())
+					results[i] = valResult{
+						name:   v.Artifact.Artifact.Name,
+						output: combinedOutput.String(),
+						err:    fmt.Errorf("%s: %w", step.Name, execErr),
+					}
+					return execErr
 				}
 			}
-			fmt.Println()
+
+			results[i] = valResult{
+				name:   v.Artifact.Artifact.Name,
+				output: combinedOutput.String(),
+			}
+			return nil
+		})
+
+		// Print results in order
+		var failures []string
+		for i, res := range results {
+			_ = i
+			if res.err != nil {
+				p.FailureWithOutput(fmt.Sprintf("%s — %s", res.name, res.err), res.output)
+				failures = append(failures, res.name)
+			} else {
+				p.Success(res.name)
+				if opts.Verbose && res.output != "" {
+					p.ErrorBox(res.output)
+				}
+			}
 		}
+
+		if len(CollectErrors(errs)) > 0 {
+			p.Blank()
+			p.Printf("  %s\n", p.red(fmt.Sprintf("Validation failed for: %s", strings.Join(failures, ", "))))
+			p.Hint("Fix the errors above and run 'bear plan' again.")
+			return fmt.Errorf("validation failed")
+		}
+
+		p.Blank()
+		p.Printf("  %s\n", p.green("All validations passed!"))
+	}
+
+	// Phase 2: Write plan file
+	planFile := config.NewPlanFile(currentCommit)
+	planFile.Validated = len(validates)
+
+	for _, d := range deploys {
+		params := mergeParams(cfg, d.Artifact.Artifact.Target, d.Artifact.Artifact.Params)
+		params["NAME"] = d.Artifact.Artifact.Name
+		params["VERSION"] = deployVersion[:min(7, len(deployVersion))]
+
+		pa := config.PlanArtifact{
+			Name:         d.Artifact.Artifact.Name,
+			Path:         d.Artifact.Path,
+			Language:     d.Artifact.Language,
+			Target:       d.Artifact.Artifact.Target,
+			Action:       "deploy",
+			Reason:       d.Reason,
+			ChangedFiles: d.ChangedFiles,
+			Params:       params,
+			Steps:        d.Steps,
+			IsLib:        d.Artifact.Artifact.IsLib,
+		}
+
+		if d.PinCommit != "" {
+			pa.Pinned = true
+			pa.PinCommit = d.PinCommit
+		}
+
+		planFile.Artifacts = append(planFile.Artifacts, pa)
+		planFile.ToDeploy++
+	}
+
+	for _, s := range skips {
+		planFile.Skipped = append(planFile.Skipped, config.PlanSkipped{
+			Name:   s.Artifact.Artifact.Name,
+			Reason: s.Reason,
+		})
+		planFile.TotalSkips++
+	}
+
+	if err := config.WritePlan(rootPath, planFile); err != nil {
+		return fmt.Errorf("error writing plan file: %w", err)
+	}
+
+	// Phase 3: Show the validated plan
+	printValidatedPlan(p, plan, planFile, rootPath, opts)
+
+	return nil
+}
+
+func printValidatedPlan(p *Printer, plan *internal.Plan, planFile *config.PlanFile, rootPath string, opts Options) {
+	p.PhaseHeader("Plan")
+
+	if len(opts.Artifacts) > 0 {
+		p.Printf("  Artifacts: %s\n", strings.Join(opts.Artifacts, ", "))
+		p.Blank()
+	}
+
+	if opts.PinCommit != "" {
+		p.Printf("  %s Pinning to: %s\n", p.yellow("📌"), opts.PinCommit[:min(8, len(opts.PinCommit))])
+		p.Blank()
+	}
+
+	if plan.TotalChanges > 0 {
+		p.Printf("  %s\n", p.dim(fmt.Sprintf("%d file(s) changed", plan.TotalChanges)))
+		p.Blank()
 	}
 
 	// Show deployments
-	if len(deploys) > 0 {
-		fmt.Println("🚀 To Deploy:")
-		fmt.Println()
-		for _, d := range deploys {
-			relPath, _ := filepath.Rel(rootPath, d.Artifact.Path)
-			fmt.Printf("  ~ %s\n", d.Artifact.Artifact.Name)
-			fmt.Printf("    Path:   %s\n", relPath)
-			fmt.Printf("    Target: %s\n", d.Artifact.Artifact.Target)
-			fmt.Printf("    Reason: %s\n", d.Reason)
+	if len(planFile.Artifacts) > 0 {
+		p.Printf("  %s\n", p.cyan("To Deploy:"))
+		p.Blank()
+		for _, d := range planFile.Artifacts {
+			relPath, _ := filepath.Rel(rootPath, d.Path)
+			p.Printf("  %s %s\n", p.bold("~"), p.bold(d.Name))
+			p.Detail("Path:  ", relPath)
+			p.Detail("Target:", d.Target)
+			p.Detail("Reason:", d.Reason)
 
-			// Show last deployed commit from lock file
 			if plan.LockFile != nil {
-				lastCommit := plan.LockFile.GetLastDeployedCommit(d.Artifact.Artifact.Name)
+				lastCommit := plan.LockFile.GetLastDeployedCommit(d.Name)
 				if lastCommit != "" {
-					fmt.Printf("    Last:   %s\n", lastCommit[:min(7, len(lastCommit))])
+					p.Detail("Last:  ", lastCommit[:min(7, len(lastCommit))])
 				} else {
-					fmt.Printf("    Last:   (never deployed)\n")
+					p.Detail("Last:  ", "(never deployed)")
 				}
 			}
 
 			if len(d.Steps) > 0 {
-				fmt.Printf("    Steps:  %d\n", len(d.Steps))
+				p.Detail("Steps: ", fmt.Sprintf("%d", len(d.Steps)))
 				for _, step := range d.Steps {
-					fmt.Printf("            - %s\n", step.Name)
+					p.Printf("             %s\n", p.dim("- "+step.Name))
 				}
 			}
-			fmt.Println()
+			p.Blank()
 		}
 	}
 
 	// Show skips (compact)
-	if len(skips) > 0 {
-		fmt.Println("⏭️  Unchanged (will skip):")
-		fmt.Println()
-		for _, s := range skips {
-			lastCommit := ""
-			isPinned := false
-			if plan.LockFile != nil {
-				lastCommit = plan.LockFile.GetLastDeployedCommit(s.Artifact.Artifact.Name)
-				isPinned = plan.LockFile.IsPinned(s.Artifact.Artifact.Name)
+	if len(planFile.Skipped) > 0 {
+		p.Printf("  %s\n", p.dim("Unchanged (will skip):"))
+		p.Blank()
+		for _, s := range planFile.Skipped {
+			reason := ""
+			if strings.Contains(s.Reason, "pinned") {
+				reason = " 📌"
 			}
-
-			if isPinned {
-				fmt.Printf("  - %s 📌 PINNED (version: %s)\n", s.Artifact.Artifact.Name, lastCommit[:min(7, len(lastCommit))])
-			} else if lastCommit != "" {
-				fmt.Printf("  - %s (deployed: %s)\n", s.Artifact.Artifact.Name, lastCommit[:min(7, len(lastCommit))])
-			} else {
-				fmt.Printf("  - %s\n", s.Artifact.Artifact.Name)
-			}
+			p.Printf("  %s %s%s\n", p.dim("–"), p.dim(s.Name), reason)
 		}
-		fmt.Println()
+		p.Blank()
 	}
 
 	// Summary
-	fmt.Println("─────────────────────────────────")
-	fmt.Println()
-	fmt.Printf("Plan: %d to validate, %d to deploy, %d unchanged\n",
-		plan.ToValidate, plan.ToDeploy, plan.ToSkip)
-	fmt.Println()
-
-	if plan.ToValidate > 0 || plan.ToDeploy > 0 {
-		fmt.Println("Run 'bear apply' to execute this plan.")
-	} else {
-		fmt.Println("No changes detected. Nothing to do.")
+	parts := []string{}
+	if planFile.Validated > 0 {
+		parts = append(parts, p.SummaryValidated(planFile.Validated))
 	}
+	if planFile.ToDeploy > 0 {
+		parts = append(parts, p.SummaryDeploy(planFile.ToDeploy))
+	}
+	if planFile.TotalSkips > 0 {
+		parts = append(parts, p.SummarySkipped(planFile.TotalSkips))
+	}
+	p.Summary(parts...)
+
+	if planFile.ToDeploy > 0 {
+		p.Hint("Run 'bear apply' to execute this plan.")
+	}
+}
+
+func mergeParams(cfg *config.Config, targetName string, artifactParams map[string]string) map[string]string {
+	params := make(map[string]string)
+
+	// Find target template and apply defaults
+	for _, t := range cfg.Targets {
+		if t.Name == targetName {
+			for k, v := range t.Defaults {
+				params[k] = v
+			}
+			break
+		}
+	}
+
+	// Override with artifact params
+	for k, v := range artifactParams {
+		params[k] = v
+	}
+
+	return params
 }

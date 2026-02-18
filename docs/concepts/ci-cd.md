@@ -12,22 +12,29 @@ After `bear apply`, the lock file (`bear.lock.yml`) is updated with deployed ver
 
 ## Solutions
 
-### Option 1: `--commit` Flag (Recommended)
+### Option 1: Auto-Commit (Default)
 
-Bear can automatically commit and push the lock file with `[skip ci]`:
+Bear automatically commits and pushes the lock file with `[skip ci]` after every `bear apply`:
 
 ```bash
-bear apply --commit
+bear plan && bear apply
 ```
 
 This:
 
-1. Runs the deployment
-2. Updates `bear.lock.yml`
-3. Commits with message: `chore(bear): update lock file [skip ci]`
-4. Pushes to the repository
+1. Creates and validates a deployment plan
+2. Runs the deployments
+3. Updates `bear.lock.yml`
+4. Commits with message: `chore(bear): update lock file [skip ci]`
+5. Pushes to the repository
 
 Most CI systems (GitHub Actions, GitLab CI, CircleCI, etc.) recognize `[skip ci]` and won't trigger a new build.
+
+To disable auto-commit, use `--no-commit`:
+
+```bash
+bear apply --no-commit
+```
 
 ### Option 2: Path Filters
 
@@ -75,8 +82,8 @@ Bear provides official Docker images for easy CI integration without installing 
 | `ghcr.io/irevolve/bear:0.4.0-debian` | ~50MB | Full environment |
 
 !!! tip "Which image to choose?"
-    - Use `:latest` (scratch) for pure `plan`/`apply` without `--commit`
-    - Use `-alpine` or `-debian` when you need `--commit` (requires Git)
+    - Use `:latest` (scratch) for pure `plan`/`apply` with `--no-commit`
+    - Use `-alpine` or `-debian` for auto-commit (default, requires Git)
 
 ### GitHub Actions with Docker
 
@@ -106,7 +113,7 @@ jobs:
       - name: Apply
         run: bear apply
 
-  # Or with --commit (requires Git)
+  # With auto-commit (default, requires Git)
   deploy-with-commit:
     runs-on: ubuntu-latest
     container:
@@ -123,8 +130,8 @@ jobs:
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git config --global --add safe.directory $GITHUB_WORKSPACE
       
-      - name: Apply with commit
-        run: bear apply --commit
+      - name: Apply
+        run: bear apply
 ```
 
 ### GitLab CI with Docker
@@ -140,7 +147,7 @@ deploy:
   
   script:
     - bear plan
-    - bear apply --commit
+    - bear apply
 ```
 
 ### Generic Docker Usage
@@ -197,7 +204,7 @@ jobs:
         run: bear plan
       
       - name: Apply
-        run: bear apply --commit
+        run: bear apply
         env:
           # Add your deployment credentials
           DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
@@ -227,7 +234,7 @@ deploy:
   
   script:
     - bear plan
-    - bear apply --commit
+    - bear apply
 ```
 
 ## Environment Variables
@@ -251,32 +258,17 @@ env:
   AWS_REGION: eu-central-1
 ```
 
-## Parallel Builds
+## Parallel Execution
 
-For large monorepos, you can parallelize:
+Bear runs validations and deployments in parallel by default (`--concurrency 10`).
+For large monorepos, you can tune the concurrency:
 
-```yaml
-jobs:
-  plan:
-    runs-on: ubuntu-latest
-    outputs:
-      matrix: ${{ steps.plan.outputs.matrix }}
-    steps:
-      - uses: actions/checkout@v4
-      - run: |
-          # Generate matrix from bear plan output
-          bear plan --json > plan.json
-          echo "matrix=$(cat plan.json | jq -c '.artifacts')" >> $GITHUB_OUTPUT
+```bash
+# Limit to 5 parallel validations
+bear plan --concurrency 5
 
-  deploy:
-    needs: plan
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        artifact: ${{ fromJson(needs.plan.outputs.matrix) }}
-    steps:
-      - uses: actions/checkout@v4
-      - run: bear apply ${{ matrix.artifact }}
+# Limit to 3 parallel deployments
+bear apply --concurrency 3
 ```
 
 ## Manual Approval
@@ -303,7 +295,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: bear apply --commit
+      - run: bear apply
 ```
 
 ## Dry Run in PRs

@@ -29,21 +29,19 @@ func (v *ValidationResult) HasErrors() bool {
 
 func Check(configPath string) error {
 	result := &ValidationResult{}
+	p := NewPrinter()
 
-	fmt.Println()
-	fmt.Println("🔍 Bear Configuration Check")
-	fmt.Println("===========================")
-	fmt.Println()
+	p.BearHeader("Check")
 
 	// 1. Load config
-	fmt.Print("📄 Loading config... ")
+	p.Printf("  Loading config... ")
 	cfg, err := internal.Load(configPath)
 	if err != nil {
-		fmt.Println("❌")
+		p.Println(p.red("✗"))
 		result.AddError("Failed to load config: %v", err)
-		return printResult(result)
+		return printCheckResult(p, result)
 	}
-	fmt.Printf("✓ %s\n", cfg.Name)
+	p.Printf("%s %s\n", p.green("✓"), cfg.Name)
 
 	rootPath := filepath.Dir(configPath)
 	if rootPath == "." {
@@ -51,12 +49,12 @@ func Check(configPath string) error {
 	}
 
 	// 2. Check languages
-	fmt.Print("🔤 Checking languages... ")
+	p.Printf("  Checking languages... ")
 	if len(cfg.Languages) == 0 {
 		result.AddWarning("No languages defined")
-		fmt.Println("⚠️  none defined")
+		p.Println(p.yellow("none defined"))
 	} else {
-		fmt.Printf("✓ %d defined\n", len(cfg.Languages))
+		p.Printf("%s %d defined\n", p.green("✓"), len(cfg.Languages))
 		for _, lang := range cfg.Languages {
 			if len(lang.Detection.Files) == 0 && lang.Detection.Pattern == "" {
 				result.AddWarning("Language '%s' has no detection rules", lang.Name)
@@ -65,12 +63,12 @@ func Check(configPath string) error {
 	}
 
 	// 3. Check targets
-	fmt.Print("🎯 Checking targets... ")
+	p.Printf("  Checking targets... ")
 	if len(cfg.Targets) == 0 {
 		result.AddWarning("No targets defined")
-		fmt.Println("⚠️  none defined")
+		p.Println(p.yellow("none defined"))
 	} else {
-		fmt.Printf("✓ %d defined\n", len(cfg.Targets))
+		p.Printf("%s %d defined\n", p.green("✓"), len(cfg.Targets))
 	}
 	targetNames := make(map[string]bool)
 	for _, t := range cfg.Targets {
@@ -78,15 +76,15 @@ func Check(configPath string) error {
 	}
 
 	// 4. Scan artifacts
-	fmt.Print("📦 Scanning artifacts... ")
+	p.Printf("  Scanning artifacts... ")
 	artifacts, err := internal.ScanArtifacts(rootPath, cfg)
 	if err != nil {
-		fmt.Println("❌")
+		p.Println(p.red("✗"))
 		result.AddError("Failed to scan artifacts: %v", err)
-		return printResult(result)
+		return printCheckResult(p, result)
 	}
 	if len(artifacts) == 0 {
-		fmt.Println("⚠️  none found")
+		p.Println(p.yellow("none found"))
 		result.AddWarning("No artifacts found")
 	} else {
 		libs := 0
@@ -95,7 +93,7 @@ func Check(configPath string) error {
 				libs++
 			}
 		}
-		fmt.Printf("✓ %d found (%d services, %d libraries)\n", len(artifacts), len(artifacts)-libs, libs)
+		p.Printf("%s %d found (%d services, %d libraries)\n", p.green("✓"), len(artifacts), len(artifacts)-libs, libs)
 	}
 
 	// 5. Create artifact map
@@ -109,7 +107,7 @@ func Check(configPath string) error {
 	}
 
 	// 6. Check each artifact
-	fmt.Print("🔗 Checking dependencies... ")
+	p.Printf("  Checking dependencies... ")
 	depErrors := 0
 	for _, a := range artifacts {
 		// Check language detection
@@ -137,25 +135,25 @@ func Check(configPath string) error {
 		}
 	}
 	if depErrors == 0 {
-		fmt.Println("✓ all resolved")
+		p.Printf("%s all resolved\n", p.green("✓"))
 	} else {
-		fmt.Printf("❌ %d unresolved\n", depErrors)
+		p.Printf("%s %d unresolved\n", p.red("✗"), depErrors)
 	}
 
 	// 7. Check for circular dependencies
-	fmt.Print("🔄 Checking for cycles... ")
+	p.Printf("  Checking for cycles... ")
 	cycles := findCycles(artifacts)
 	if len(cycles) > 0 {
-		fmt.Println("❌")
+		p.Println(p.red("✗"))
 		for _, cycle := range cycles {
 			result.AddError("Circular dependency: %s", strings.Join(cycle, " → "))
 		}
 	} else {
-		fmt.Println("✓ none")
+		p.Printf("%s none\n", p.green("✓"))
 	}
 
-	fmt.Println()
-	return printResult(result)
+	p.Blank()
+	return printCheckResult(p, result)
 }
 
 // findCycles finds circular dependencies
@@ -216,25 +214,25 @@ func findCycles(artifacts []internal.DiscoveredArtifact) [][]string {
 	return cycles
 }
 
-func printResult(result *ValidationResult) error {
+func printCheckResult(p *Printer, result *ValidationResult) error {
 	if len(result.Warnings) > 0 {
-		fmt.Println("⚠️  Warnings:")
+		p.Printf("  %s\n", p.yellow("Warnings:"))
 		for _, w := range result.Warnings {
-			fmt.Printf("   • %s\n", w)
+			p.Printf("    %s %s\n", p.yellow("•"), w)
 		}
-		fmt.Println()
+		p.Blank()
 	}
 
 	if result.HasErrors() {
-		fmt.Println("❌ Errors:")
+		p.Printf("  %s\n", p.red("Errors:"))
 		for _, e := range result.Errors {
-			fmt.Printf("   • %s\n", e)
+			p.Printf("    %s %s\n", p.red("•"), e)
 		}
-		fmt.Println()
-		fmt.Printf("Check failed with %d error(s)\n", len(result.Errors))
+		p.Blank()
+		p.Printf("  %s\n", p.red(fmt.Sprintf("Check failed with %d error(s)", len(result.Errors))))
 		return fmt.Errorf("validation failed")
 	}
 
-	fmt.Println("✅ All checks passed!")
+	p.Printf("  %s\n", p.green("All checks passed!"))
 	return nil
 }

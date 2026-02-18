@@ -11,7 +11,7 @@ A Terraform-inspired CI/CD tool for monorepos. Bear detects changes, resolves de
 - 📋 **Plan/Apply workflow** — Review changes before deploying
 - 🔒 **Lock file** — Track deployed versions per artifact
 - 📚 **Library support** — Validate-only artifacts (no deploy)
-- ⏪ **Rollback** — Redeploy any previous version
+- ⏪ **Pinning & Rollback** — Pin artifacts to specific commits via `bear plan --pin`
 - 🌍 **Multi-language** — Go, Node.js, Python, Rust, Java, TypeScript (extensible)
 - 🎯 **Configurable targets** — Docker, CloudRun, Kubernetes, Lambda, S3, Helm
 - 📦 **Community presets** — Import pre-built language and target configs from [bear-presets](https://github.com/irevolve/bear-presets)
@@ -126,17 +126,20 @@ name: shared-lib
 # List all artifacts
 bear list
 
-# Show what would be built/deployed
+# Detect changes, validate, and create deployment plan
 bear plan
 
-# Execute the plan
+# Execute the deployment plan
 bear apply
 
-# Target specific artifacts
+# Plan specific artifacts
 bear plan user-api order-api
 
 # Pin artifact to a specific version
-bear apply user-api --pin abc1234
+bear plan user-api --pin abc1234
+
+# Apply without auto-commit
+bear apply --no-commit
 
 # Different project directory
 bear plan -d ./other-project
@@ -149,9 +152,8 @@ bear plan -d ./other-project
 | `bear init` | Initialize a new Bear project |
 | `bear list` | List all discovered artifacts |
 | `bear list --tree` | Show dependency tree |
-| `bear plan [artifacts...]` | Show planned validations and deployments |
-| `bear plan --validate` | Plan and run validation (lint, test) |
-| `bear apply [artifacts...]` | Execute the plan (validate, then deploy) |
+| `bear plan [artifacts...]` | Detect changes, validate, and create deployment plan |
+| `bear apply` | Execute the deployment plan from `.bear/plan.yml` |
 | `bear check` | Validate configuration and dependencies |
 | `bear preset list` | Show available presets |
 | `bear preset show <type> <name>` | Show preset details |
@@ -163,13 +165,21 @@ bear plan -d ./other-project
 |------|-------------|
 | `-d, --dir <path>` | Path to project directory (default: `.`) |
 | `-f, --force` | Force operation, ignore pinned artifacts |
+| `-v, --verbose` | Show full command output |
+
+### Plan Flags
+
+| Flag | Description |
+|------|-------------|
+| `--pin <commit>` | Pin artifact to a specific commit |
+| `--concurrency <n>` | Maximum parallel validations (default: `10`) |
 
 ### Apply Flags
 
 | Flag | Description |
 |------|-------------|
-| `--pin <commit>` | Pin artifact to a specific commit |
-| `-c, --commit` | Commit and push lock file with [skip ci] |
+| `--no-commit` | Skip automatic commit of the lock file |
+| `--concurrency <n>` | Maximum parallel deployments (default: `10`) |
 
 ### Pinning
 
@@ -177,35 +187,29 @@ When you pin an artifact, it stays at that version:
 
 ```bash
 # Pin user-api to commit abc1234
-bear apply user-api --pin abc1234
+bear plan user-api --pin abc1234
+bear apply
 
-# Future applies will skip pinned artifacts
-bear plan  # Shows: user-api 📌 PINNED
+# Future plans will skip pinned artifacts
+bear plan  # Shows: user-api  pinned
 
-# Force apply to override pin (removes the pin)
-bear apply user-api --force
+# Force plan to override pin (removes the pin)
+bear plan user-api --force
 ```
 
 ## How It Works
 
+```mermaid
+flowchart LR
+    A["Detect\nChanges"] --> B["Plan\n(Validate)"]
+    B --> C["Apply\n(Deploy)"]
 ```
-┌─────────────┐     ┌─────────────┐     ┌─────────────┐
-│   Detect    │────▶│    Plan     │────▶│    Apply    │
-│   Changes   │     │  (Review)   │     │  (Execute)  │
-└─────────────┘     └─────────────┘     └─────────────┘
-      │                   │                   │
-      ▼                   ▼                   ▼
- Compare to         Show affected       Phase 1: Validate
- last deployed      artifacts with       (setup, lint,
- commit (lock)      dependencies          test, build)
-                                               │
-                                               ▼
-                                         Phase 2: Deploy
-                                          (per target)
-                                               │
-                                               ▼
-                                         Update lock file
-```
+
+| Phase | Description |
+|-------|-------------|
+| **Detect** | Compare each artifact against its last deployed commit (lock file) |
+| **Plan** | Validate changed artifacts in parallel, write `.bear/plan.yml` |
+| **Apply** | Deploy from the plan, update lock file |
 
 ### Change Detection
 
@@ -221,12 +225,10 @@ This means Bear doesn't need a base branch — it tracks state per artifact.
 
 If artifact A depends on library B, and B changes, then A is marked for rebuild:
 
-```
-shared-lib (changed)
-    ↓
-user-api (dependency changed) → rebuild + redeploy
-    ↓
-dashboard (dependency changed) → rebuild + redeploy
+```mermaid
+flowchart TB
+    A["shared-lib (changed)"] --> B["user-api → rebuild + redeploy"]
+    A --> C["dashboard → rebuild + redeploy"]
 ```
 
 ### Lock File
@@ -248,6 +250,8 @@ artifacts:
 my-monorepo/
 ├── bear.config.yml          # Main config
 ├── bear.lock.yml            # Deployed versions (auto-generated)
+├── .bear/                   # Plan directory (gitignored)
+│   └── plan.yml             # Validated deployment plan
 ├── apps/
 │   └── dashboard/
 │       ├── bear.artifact.yml

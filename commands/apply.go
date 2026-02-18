@@ -9,29 +9,29 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var commitLock bool
-var pinCommit string
+var (
+	applyNoCommit    bool
+	applyConcurrency int
+)
 
 var applyCmd = &cobra.Command{
-	Use:   "apply [artifacts...]",
-	Short: "Execute the plan (validate and deploy changed artifacts)",
-	Long: `Executes the deployment plan in two phases:
+	Use:   "apply",
+	Short: "Execute the deployment plan",
+	Long: `Reads the plan from .bear/plan.yml (created by 'bear plan') and
+executes the deployments in parallel.
 
-Phase 1: Validation
-  Runs setup, lint, test, and build steps for all changed artifacts.
+After successful deployment, the lock file is updated and automatically
+committed with [skip ci]. Use --no-commit to disable auto-commit.
 
-Phase 2: Deployment
-  Deploys validated artifacts to their configured targets.
+The plan file is removed after execution.
 
-After successful deployment, the lock file is updated with the
-deployed commit hash.
+Requires a plan file — run 'bear plan' first.
 
 Examples:
-  bear apply                           # Apply all changed artifacts
-  bear apply user-api                  # Apply specific artifact
-  bear apply user-api --pin abc123     # Pin artifact to specific commit
-  bear apply user-api --force          # Force apply, remove pin
-  bear apply --commit                  # Apply and commit lock file with [skip ci]`,
+  bear plan && bear apply          # Plan and apply
+  bear apply                       # Apply existing plan
+  bear apply --no-commit           # Apply without committing lock file
+  bear apply --concurrency 5       # Limit parallel deployments`,
 	RunE: func(c *cobra.Command, args []string) error {
 		// Convert to absolute path
 		absDir, err := filepath.Abs(workDir)
@@ -45,10 +45,10 @@ Examples:
 		}
 
 		opts := cmd.Options{
-			Artifacts: args, // Positional args are the artifacts
-			PinCommit: pinCommit,
-			Force:     force,
-			Commit:    commitLock,
+			Force:       force,
+			NoCommit:    applyNoCommit,
+			Concurrency: applyConcurrency,
+			Verbose:     verbose,
 		}
 
 		return cmd.ApplyWithOptions(configPath, opts)
@@ -57,6 +57,6 @@ Examples:
 
 func init() {
 	rootCmd.AddCommand(applyCmd)
-	applyCmd.Flags().BoolVarP(&commitLock, "commit", "c", false, "Commit and push lock file with [skip ci]")
-	applyCmd.Flags().StringVar(&pinCommit, "pin", "", "Pin artifact(s) to a specific commit")
+	applyCmd.Flags().BoolVar(&applyNoCommit, "no-commit", false, "Do not commit and push lock file after deployment")
+	applyCmd.Flags().IntVar(&applyConcurrency, "concurrency", 10, "Maximum number of parallel deployment jobs")
 }

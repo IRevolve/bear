@@ -32,17 +32,18 @@ bear check -d ./my-project
 ## Output
 
 ```
-🔍 Bear Configuration Check
-===========================
+  BEAR — Check
+──────────────────────────────────────
 
-📄 Loading config... ✓ my-platform
-🔤 Checking languages... ✓ 3 defined
-🎯 Checking targets... ✓ 2 defined
-📦 Scanning artifacts... ✓ 5 found (3 services, 2 libraries)
-🔗 Checking dependencies... ✓ all resolved
-🔄 Checking for cycles... ✓ none
+  Loading config...          ✓ my-platform
+  Checking languages...      ✓ 3 defined
+  Checking targets...        ✓ 2 defined
+  Scanning artifacts...      ✓ 5 found (3 services, 2 libraries)
+  Checking dependencies...   ✓ all resolved
+  Checking for cycles...     ✓ none
 
-✅ All checks passed!
+──────────────────────────────────────
+  All checks passed!
 ```
 
 ## Warnings
@@ -50,9 +51,9 @@ bear check -d ./my-project
 Bear may show warnings for non-critical issues:
 
 ```
-⚠️  Warnings:
-   • Artifact 'api' has unknown language
-   • Target 'custom' has no default parameters
+  Warnings:
+    Artifact 'api' has unknown language
+    Target 'custom' has no default parameters
 ```
 
 ## Errors
@@ -60,10 +61,10 @@ Bear may show warnings for non-critical issues:
 If there are errors, Bear will show them and exit with code 1:
 
 ```
-❌ Errors:
-   • Unknown target 'invalid' in artifact 'api'
-   • Circular dependency: api → lib → api
-   • Missing dependency 'unknown-lib' in artifact 'api'
+  Errors:
+    Unknown target 'invalid' in artifact 'api'
+    Circular dependency: api → lib → api
+    Missing dependency 'unknown-lib' in artifact 'api'
 ```
 
 ## See Also
