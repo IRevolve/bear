@@ -10,8 +10,7 @@ import (
 )
 
 var (
-	applyNoCommit    bool
-	applyConcurrency int
+	applyNoCommit bool
 )
 
 var applyCmd = &cobra.Command{
@@ -27,11 +26,13 @@ The plan file is removed after execution.
 
 Requires a plan file — run 'bear plan' first.
 
+Artifacts without dependencies deploy in parallel. Artifacts with
+dependencies wait for their dependencies to complete first.
+
 Examples:
   bear plan && bear apply          # Plan and apply
   bear apply                       # Apply existing plan
-  bear apply --no-commit           # Apply without committing lock file
-  bear apply --concurrency 5       # Limit parallel deployments`,
+  bear apply --no-commit           # Apply without committing lock file`,
 	RunE: func(c *cobra.Command, args []string) error {
 		// Convert to absolute path
 		absDir, err := filepath.Abs(workDir)
@@ -45,10 +46,9 @@ Examples:
 		}
 
 		opts := cmd.Options{
-			Force:       force,
-			NoCommit:    applyNoCommit,
-			Concurrency: applyConcurrency,
-			Verbose:     verbose,
+			Force:    force,
+			NoCommit: applyNoCommit,
+			Verbose:  verbose,
 		}
 
 		return cmd.ApplyWithOptions(configPath, opts)
@@ -58,5 +58,4 @@ Examples:
 func init() {
 	rootCmd.AddCommand(applyCmd)
 	applyCmd.Flags().BoolVar(&applyNoCommit, "no-commit", false, "Do not commit and push lock file after deployment")
-	applyCmd.Flags().IntVar(&applyConcurrency, "concurrency", 10, "Maximum number of parallel deployment jobs")
 }

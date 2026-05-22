@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/irevolve/bear/internal"
 	"github.com/irevolve/bear/internal/config"
@@ -58,7 +59,8 @@ func ApplyWithOptions(configPath string, opts Options) error {
 		return fmt.Errorf("error loading lock file: %w", err)
 	}
 
-	// Deploy all artifacts in parallel
+	// Deploy artifacts respecting dependencies — independent artifacts run in parallel,
+	// dependent artifacts wait for their dependencies to complete.
 	p.PhaseHeader(fmt.Sprintf("Deploying %d artifact(s)", len(planFile.Artifacts)))
 
 	type deployResult struct {
@@ -68,38 +70,81 @@ func ApplyWithOptions(configPath string, opts Options) error {
 	}
 	results := make([]deployResult, len(planFile.Artifacts))
 
-	errs := RunParallel(ctx, opts.Concurrency, len(planFile.Artifacts), func(ctx context.Context, i int) error {
-		artifact := planFile.Artifacts[i]
-		var combinedOutput bytes.Buffer
+	// Build index: artifact name → index in planFile.Artifacts
+	nameToIdx := make(map[string]int, len(planFile.Artifacts))
+	for i, a := range planFile.Artifacts {
+		nameToIdx[a.Name] = i
+	}
 
-		for _, step := range artifact.Steps {
-			var stdout, stderr bytes.Buffer
-			execErr := ExecuteStep(ctx, step.Run, artifact.Path, artifact.Vars, &stdout, &stderr)
+	// For each artifact, track completion via channels
+	done := make([]chan struct{}, len(planFile.Artifacts))
+	for i := range done {
+		done[i] = make(chan struct{})
+	}
 
-			if opts.Verbose {
-				combinedOutput.WriteString(fmt.Sprintf("  → %s\n", step.Name))
-				combinedOutput.Write(stdout.Bytes())
-				combinedOutput.Write(stderr.Bytes())
-			}
+	var wg sync.WaitGroup
+	for i := range planFile.Artifacts {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			defer close(done[i])
 
-			if execErr != nil {
-				combinedOutput.Write(stdout.Bytes())
-				combinedOutput.Write(stderr.Bytes())
-				results[i] = deployResult{
-					name:   artifact.Name,
-					output: combinedOutput.String(),
-					err:    fmt.Errorf("%s: %w", step.Name, execErr),
+			artifact := planFile.Artifacts[i]
+
+			// Wait for dependencies that are also being deployed
+			for _, dep := range artifact.Depends {
+				if depIdx, ok := nameToIdx[dep]; ok {
+					select {
+					case <-done[depIdx]:
+						// Dependency finished — check if it failed
+						if results[depIdx].err != nil {
+							results[i] = deployResult{
+								name: artifact.Name,
+								err:  fmt.Errorf("dependency '%s' failed", dep),
+							}
+							return
+						}
+					case <-ctx.Done():
+						results[i] = deployResult{
+							name: artifact.Name,
+							err:  ctx.Err(),
+						}
+						return
+					}
 				}
-				return execErr
 			}
-		}
 
-		results[i] = deployResult{
-			name:   artifact.Name,
-			output: combinedOutput.String(),
-		}
-		return nil
-	})
+			// Run deploy steps sequentially
+			var combinedOutput bytes.Buffer
+			for _, step := range artifact.Steps {
+				var stdout, stderr bytes.Buffer
+				execErr := ExecuteStep(ctx, step.Run, artifact.Path, artifact.Vars, &stdout, &stderr)
+
+				if opts.Verbose {
+					combinedOutput.WriteString(fmt.Sprintf("  → %s\n", step.Name))
+					combinedOutput.Write(stdout.Bytes())
+					combinedOutput.Write(stderr.Bytes())
+				}
+
+				if execErr != nil {
+					combinedOutput.Write(stdout.Bytes())
+					combinedOutput.Write(stderr.Bytes())
+					results[i] = deployResult{
+						name:   artifact.Name,
+						output: combinedOutput.String(),
+						err:    fmt.Errorf("%s: %w", step.Name, execErr),
+					}
+					return
+				}
+			}
+
+			results[i] = deployResult{
+				name:   artifact.Name,
+				output: combinedOutput.String(),
+			}
+		}(i)
+	}
+	wg.Wait()
 
 	// Print results in order and update lock file for successful deployments
 	var failures []string
@@ -130,8 +175,7 @@ func ApplyWithOptions(configPath string, opts Options) error {
 		}
 	}
 
-	failedErrs := CollectErrors(errs)
-	if len(failedErrs) > 0 {
+	if len(failures) > 0 {
 		p.Blank()
 		p.Printf("  %s\n", p.red(fmt.Sprintf("Deployment failed for: %s", strings.Join(failures, ", "))))
 	}
@@ -176,8 +220,8 @@ func ApplyWithOptions(configPath string, opts Options) error {
 	}
 	p.Summary(parts...)
 
-	if len(failedErrs) > 0 {
-		return fmt.Errorf("deployment failed for %d artifact(s)", len(failedErrs))
+	if len(failures) > 0 {
+		return fmt.Errorf("deployment failed for %d artifact(s)", len(failures))
 	}
 
 	return nil

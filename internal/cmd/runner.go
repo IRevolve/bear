@@ -12,8 +12,6 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-const defaultConcurrency = 10
-
 // StepResult holds the result of a single step execution
 type StepResult struct {
 	StepName string
@@ -28,16 +26,11 @@ type ArtifactResult struct {
 	Err     error
 }
 
-// RunParallel runs a function for each item in parallel with the given concurrency limit.
+// RunParallel runs a function for each item in parallel with no concurrency limit.
 // The function f receives the index and must return an error.
 // Results are collected and returned in order.
-func RunParallel(ctx context.Context, concurrency int, count int, f func(ctx context.Context, i int) error) []error {
-	if concurrency <= 0 {
-		concurrency = defaultConcurrency
-	}
-
+func RunParallel(ctx context.Context, _ int, count int, f func(ctx context.Context, i int) error) []error {
 	g, ctx := errgroup.WithContext(ctx)
-	g.SetLimit(concurrency)
 
 	errs := make([]error, count)
 	var mu sync.Mutex

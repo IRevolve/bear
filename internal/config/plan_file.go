@@ -22,6 +22,7 @@ type PlanArtifact struct {
 	Pinned       bool              `yaml:"pinned,omitempty"`
 	PinCommit    string            `yaml:"pin_commit,omitempty"`
 	IsLib        bool              `yaml:"is_lib,omitempty"`
+	Depends      []string          `yaml:"depends,omitempty"`
 }
 
 // PlanSkipped represents a skipped artifact

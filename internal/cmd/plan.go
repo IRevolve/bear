@@ -76,7 +76,7 @@ func PlanWithOptions(configPath string, opts Options) error {
 		}
 		results := make([]valResult, len(validates))
 
-		errs := RunParallel(ctx, opts.Concurrency, len(validates), func(ctx context.Context, i int) error {
+		errs := RunParallel(ctx, 0, len(validates), func(ctx context.Context, i int) error {
 			v := validates[i]
 			var combinedOutput bytes.Buffer
 
@@ -155,6 +155,7 @@ func PlanWithOptions(configPath string, opts Options) error {
 			Vars:         vars,
 			Steps:        d.Steps,
 			IsLib:        d.Artifact.Artifact.IsLib,
+			Depends:      d.Artifact.Artifact.Depends,
 		}
 
 		if d.PinCommit != "" {

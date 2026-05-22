@@ -10,8 +10,7 @@ import (
 )
 
 var (
-	planConcurrency int
-	planPinCommit   string
+	planPinCommit string
 )
 
 var planCmd = &cobra.Command{
@@ -33,7 +32,6 @@ Examples:
   bear plan user-api               # Plan specific artifact
   bear plan user-api order-api     # Plan multiple artifacts
   bear plan --pin abc123           # Pin artifact(s) to specific commit
-  bear plan --concurrency 5        # Limit parallel validations
   bear plan -d ./other-project     # Plan in different directory`,
 	RunE: func(c *cobra.Command, args []string) error {
 		// Convert to absolute path
@@ -48,11 +46,10 @@ Examples:
 		}
 
 		opts := cmd.Options{
-			Artifacts:   args,
-			PinCommit:   planPinCommit,
-			Force:       force,
-			Concurrency: planConcurrency,
-			Verbose:     verbose,
+			Artifacts: args,
+			PinCommit: planPinCommit,
+			Force:     force,
+			Verbose:   verbose,
 		}
 
 		return cmd.PlanWithOptions(configPath, opts)
@@ -60,7 +57,6 @@ Examples:
 }
 
 func init() {
-	planCmd.Flags().IntVar(&planConcurrency, "concurrency", 10, "Maximum number of parallel validation jobs")
 	planCmd.Flags().StringVar(&planPinCommit, "pin", "", "Pin artifact(s) to a specific commit")
 	rootCmd.AddCommand(planCmd)
 }
