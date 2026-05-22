@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"strings"
@@ -111,6 +112,12 @@ func buildEnv(vars map[string]string) []string {
 // Variables are passed as environment variables to the shell.
 // Output is written to the provided writers.
 func ExecuteStep(ctx context.Context, stepRun string, workDir string, vars map[string]string, stdout, stderr *bytes.Buffer) error {
+	return ExecuteStepWithWriters(ctx, stepRun, workDir, vars, stdout, stderr)
+}
+
+// ExecuteStepWithWriters runs a step with arbitrary io.Writers for stdout/stderr.
+// If a writer is nil, output goes to os.Stdout/os.Stderr.
+func ExecuteStepWithWriters(ctx context.Context, stepRun string, workDir string, vars map[string]string, stdout, stderr io.Writer) error {
 	// Detect shell based on OS
 	shell, shellArg := getShell()
 

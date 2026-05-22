@@ -192,3 +192,11 @@ func (p *Printer) Hint(text string) {
 func (p *Printer) Warning(text string) {
 	p.Printf("  %s %s\n", p.yellow("⚠"), text)
 }
+
+// IsTerminal returns true when the printer is writing to an interactive terminal.
+func (p *Printer) IsTerminal() bool {
+	if f, ok := p.out.(*os.File); ok {
+		return term.IsTerminal(int(f.Fd()))
+	}
+	return false
+}

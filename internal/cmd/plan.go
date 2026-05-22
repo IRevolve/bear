@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/irevolve/bear/internal"
 	"github.com/irevolve/bear/internal/config"
@@ -76,13 +78,35 @@ func PlanWithOptions(configPath string, opts Options) error {
 		}
 		results := make([]valResult, len(validates))
 
+		// Stream output in real-time when not in a terminal (CI) or when verbose
+		streamOutput := opts.Verbose || !p.IsTerminal()
+
+		var outputMu sync.Mutex
+
 		errs := RunParallel(ctx, opts.Concurrency, len(validates), func(ctx context.Context, i int) error {
 			v := validates[i]
 			var combinedOutput bytes.Buffer
 
 			for _, step := range v.Steps {
 				var stdout, stderr bytes.Buffer
-				execErr := ExecuteStep(ctx, step.Run, v.Artifact.Path, mergeVars(cfg, v.Artifact.Artifact.Target, v.Artifact.Language, v.Artifact.Artifact.Vars), &stdout, &stderr)
+				vars := mergeVars(cfg, v.Artifact.Artifact.Target, v.Artifact.Language, v.Artifact.Artifact.Vars)
+
+				var stdoutWriter, stderrWriter io.Writer
+				stdoutWriter = &stdout
+				stderrWriter = &stderr
+
+				if streamOutput {
+					prefix := fmt.Sprintf("[%s] ", v.Artifact.Artifact.Name)
+					pw := &prefixWriter{w: os.Stdout, prefix: prefix, mu: &outputMu}
+					stdoutWriter = io.MultiWriter(&stdout, pw)
+					stderrWriter = io.MultiWriter(&stderr, pw)
+
+					outputMu.Lock()
+					fmt.Fprintf(os.Stdout, "[%s] → %s\n", v.Artifact.Artifact.Name, step.Name)
+					outputMu.Unlock()
+				}
+
+				execErr := ExecuteStepWithWriters(ctx, step.Run, v.Artifact.Path, vars, stdoutWriter, stderrWriter)
 
 				if opts.Verbose {
 					combinedOutput.WriteString(fmt.Sprintf("  → %s\n", step.Name))
@@ -91,8 +115,10 @@ func PlanWithOptions(configPath string, opts Options) error {
 				}
 
 				if execErr != nil {
-					combinedOutput.Write(stdout.Bytes())
-					combinedOutput.Write(stderr.Bytes())
+					if !streamOutput {
+						combinedOutput.Write(stdout.Bytes())
+						combinedOutput.Write(stderr.Bytes())
+					}
 					results[i] = valResult{
 						name:   v.Artifact.Artifact.Name,
 						output: combinedOutput.String(),

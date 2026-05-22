@@ -4,10 +4,12 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/irevolve/bear/internal"
 	"github.com/irevolve/bear/internal/config"
@@ -61,6 +63,9 @@ func ApplyWithOptions(configPath string, opts Options) error {
 	// Deploy all artifacts in parallel
 	p.PhaseHeader(fmt.Sprintf("Deploying %d artifact(s)", len(planFile.Artifacts)))
 
+	// Stream output in real-time when not in a terminal (CI) or when verbose
+	streamOutput := opts.Verbose || !p.IsTerminal()
+
 	type deployResult struct {
 		name   string
 		output string
@@ -68,13 +73,31 @@ func ApplyWithOptions(configPath string, opts Options) error {
 	}
 	results := make([]deployResult, len(planFile.Artifacts))
 
+	var outputMu sync.Mutex
+
 	errs := RunParallel(ctx, opts.Concurrency, len(planFile.Artifacts), func(ctx context.Context, i int) error {
 		artifact := planFile.Artifacts[i]
 		var combinedOutput bytes.Buffer
 
 		for _, step := range artifact.Steps {
 			var stdout, stderr bytes.Buffer
-			execErr := ExecuteStep(ctx, step.Run, artifact.Path, artifact.Vars, &stdout, &stderr)
+
+			var stdoutWriter, stderrWriter io.Writer
+			stdoutWriter = &stdout
+			stderrWriter = &stderr
+
+			if streamOutput {
+				prefix := fmt.Sprintf("[%s] ", artifact.Name)
+				pw := &prefixWriter{w: os.Stdout, prefix: prefix, mu: &outputMu}
+				stdoutWriter = io.MultiWriter(&stdout, pw)
+				stderrWriter = io.MultiWriter(&stderr, pw)
+
+				outputMu.Lock()
+				fmt.Fprintf(os.Stdout, "[%s] → %s\n", artifact.Name, step.Name)
+				outputMu.Unlock()
+			}
+
+			execErr := ExecuteStepWithWriters(ctx, step.Run, artifact.Path, artifact.Vars, stdoutWriter, stderrWriter)
 
 			if opts.Verbose {
 				combinedOutput.WriteString(fmt.Sprintf("  → %s\n", step.Name))
@@ -83,8 +106,10 @@ func ApplyWithOptions(configPath string, opts Options) error {
 			}
 
 			if execErr != nil {
-				combinedOutput.Write(stdout.Bytes())
-				combinedOutput.Write(stderr.Bytes())
+				if !streamOutput {
+					combinedOutput.Write(stdout.Bytes())
+					combinedOutput.Write(stderr.Bytes())
+				}
 				results[i] = deployResult{
 					name:   artifact.Name,
 					output: combinedOutput.String(),
