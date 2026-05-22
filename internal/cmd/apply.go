@@ -58,8 +58,10 @@ func ApplyWithOptions(configPath string, opts Options) error {
 		return fmt.Errorf("error loading lock file: %w", err)
 	}
 
-	// Deploy all artifacts in parallel
+	// Deploy all artifacts in parallel (streaming output)
 	p.PhaseHeader(fmt.Sprintf("Deploying %d artifact(s)", len(planFile.Artifacts)))
+
+	tracker := NewProgressTracker(p, len(planFile.Artifacts), "Deploying")
 
 	type deployResult struct {
 		name   string
@@ -90,6 +92,10 @@ func ApplyWithOptions(configPath string, opts Options) error {
 					output: combinedOutput.String(),
 					err:    fmt.Errorf("%s: %w", step.Name, execErr),
 				}
+
+				tracker.Complete(func(p *Printer) {
+					p.FailureWithOutput(fmt.Sprintf("%s → %s — %s", artifact.Name, artifact.Target, results[i].err), results[i].output)
+				})
 				return execErr
 			}
 		}
@@ -98,24 +104,25 @@ func ApplyWithOptions(configPath string, opts Options) error {
 			name:   artifact.Name,
 			output: combinedOutput.String(),
 		}
+
+		tracker.Complete(func(p *Printer) {
+			p.Success(fmt.Sprintf("%s → %s", artifact.Name, artifact.Target))
+			if opts.Verbose && results[i].output != "" {
+				p.ErrorBox(results[i].output)
+			}
+		})
 		return nil
 	})
 
-	// Print results in order and update lock file for successful deployments
+	// Update lock file for successful deployments
 	var failures []string
 	deployed := 0
 	for i, res := range results {
 		artifact := planFile.Artifacts[i]
 		if res.err != nil {
-			p.FailureWithOutput(fmt.Sprintf("%s → %s — %s", res.name, artifact.Target, res.err), res.output)
 			failures = append(failures, res.name)
 		} else {
-			p.Success(fmt.Sprintf("%s → %s", res.name, artifact.Target))
-			if opts.Verbose && res.output != "" {
-				p.ErrorBox(res.output)
-			}
 			deployed++
-
 			// Update lock file
 			version := deployVersion[:min(7, len(deployVersion))]
 			if artifact.Pinned {

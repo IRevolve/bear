@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/irevolve/bear/internal"
 	"github.com/irevolve/bear/internal/config"
@@ -65,16 +66,13 @@ func PlanWithOptions(configPath string, opts Options) error {
 		deployVersion = opts.PinCommit
 	}
 
-	// Phase 1: Validate all changed artifacts in parallel
+	// Phase 1: Validate all changed artifacts in parallel (streaming output)
 	if len(validates) > 0 {
 		p.PhaseHeader(fmt.Sprintf("Validating %d artifact(s)", len(validates)))
 
-		type valResult struct {
-			name   string
-			output string
-			err    error
-		}
-		results := make([]valResult, len(validates))
+		tracker := NewProgressTracker(p, len(validates), "Validating")
+		var failures []string
+		var failMu sync.Mutex
 
 		errs := RunParallel(ctx, opts.Concurrency, len(validates), func(ctx context.Context, i int) error {
 			v := validates[i]
@@ -93,36 +91,31 @@ func PlanWithOptions(configPath string, opts Options) error {
 				if execErr != nil {
 					combinedOutput.Write(stdout.Bytes())
 					combinedOutput.Write(stderr.Bytes())
-					results[i] = valResult{
-						name:   v.Artifact.Artifact.Name,
-						output: combinedOutput.String(),
-						err:    fmt.Errorf("%s: %w", step.Name, execErr),
-					}
+					name := v.Artifact.Artifact.Name
+					output := combinedOutput.String()
+					stepErr := fmt.Errorf("%s: %w", step.Name, execErr)
+
+					failMu.Lock()
+					failures = append(failures, name)
+					failMu.Unlock()
+
+					tracker.Complete(func(p *Printer) {
+						p.FailureWithOutput(fmt.Sprintf("%s — %s", name, stepErr), output)
+					})
 					return execErr
 				}
 			}
 
-			results[i] = valResult{
-				name:   v.Artifact.Artifact.Name,
-				output: combinedOutput.String(),
-			}
+			name := v.Artifact.Artifact.Name
+			output := combinedOutput.String()
+			tracker.Complete(func(p *Printer) {
+				p.Success(name)
+				if opts.Verbose && output != "" {
+					p.ErrorBox(output)
+				}
+			})
 			return nil
 		})
-
-		// Print results in order
-		var failures []string
-		for i, res := range results {
-			_ = i
-			if res.err != nil {
-				p.FailureWithOutput(fmt.Sprintf("%s — %s", res.name, res.err), res.output)
-				failures = append(failures, res.name)
-			} else {
-				p.Success(res.name)
-				if opts.Verbose && res.output != "" {
-					p.ErrorBox(res.output)
-				}
-			}
-		}
 
 		if len(CollectErrors(errs)) > 0 {
 			p.Blank()
