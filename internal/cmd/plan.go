@@ -69,6 +69,15 @@ func PlanWithOptions(configPath string, opts Options) error {
 	if len(validates) > 0 {
 		p.PhaseHeader(fmt.Sprintf("Validating %d artifact(s)", len(validates)))
 
+		// Build task names for progress tracker
+		valTaskNames := make([]string, len(validates))
+		for i, v := range validates {
+			valTaskNames[i] = v.Artifact.Artifact.Name
+		}
+
+		pt := NewProgressTracker(p, fmt.Sprintf("Validating %d artifact(s)", len(validates)), valTaskNames)
+		pt.Start()
+
 		type valResult struct {
 			name   string
 			output string
@@ -78,6 +87,7 @@ func PlanWithOptions(configPath string, opts Options) error {
 
 		errs := RunParallel(ctx, opts.Concurrency, len(validates), func(ctx context.Context, i int) error {
 			v := validates[i]
+			pt.MarkRunning(i)
 			var combinedOutput bytes.Buffer
 
 			for _, step := range v.Steps {
@@ -98,6 +108,7 @@ func PlanWithOptions(configPath string, opts Options) error {
 						output: combinedOutput.String(),
 						err:    fmt.Errorf("%s: %w", step.Name, execErr),
 					}
+					pt.MarkFailed(i, execErr, combinedOutput.String())
 					return execErr
 				}
 			}
@@ -106,21 +117,17 @@ func PlanWithOptions(configPath string, opts Options) error {
 				name:   v.Artifact.Artifact.Name,
 				output: combinedOutput.String(),
 			}
+			pt.MarkDone(i)
 			return nil
 		})
 
-		// Print results in order
+		pt.Stop()
+
+		// Check for failures
 		var failures []string
-		for i, res := range results {
-			_ = i
+		for _, res := range results {
 			if res.err != nil {
-				p.FailureWithOutput(fmt.Sprintf("%s — %s", res.name, res.err), res.output)
 				failures = append(failures, res.name)
-			} else {
-				p.Success(res.name)
-				if opts.Verbose && res.output != "" {
-					p.ErrorBox(res.output)
-				}
 			}
 		}
 
@@ -132,7 +139,7 @@ func PlanWithOptions(configPath string, opts Options) error {
 		}
 
 		p.Blank()
-		p.Printf("  %s\n", p.green("All validations passed!"))
+		p.Printf("  %s %s\n", p.green("All validations passed!"), p.dim(fmt.Sprintf("⏱ %s", formatDuration(pt.TotalElapsed()))))
 	}
 
 	// Phase 2: Write plan file

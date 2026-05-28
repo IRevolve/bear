@@ -58,8 +58,17 @@ func ApplyWithOptions(configPath string, opts Options) error {
 		return fmt.Errorf("error loading lock file: %w", err)
 	}
 
-	// Deploy all artifacts in parallel
+	// Deploy all artifacts in parallel with progress tracking
 	p.PhaseHeader(fmt.Sprintf("Deploying %d artifact(s)", len(planFile.Artifacts)))
+
+	// Build task names for progress tracker
+	taskNames := make([]string, len(planFile.Artifacts))
+	for i, a := range planFile.Artifacts {
+		taskNames[i] = fmt.Sprintf("%s → %s", a.Name, a.Target)
+	}
+
+	pt := NewProgressTracker(p, fmt.Sprintf("Deploying %d artifact(s)", len(planFile.Artifacts)), taskNames)
+	pt.Start()
 
 	type deployResult struct {
 		name   string
@@ -70,6 +79,7 @@ func ApplyWithOptions(configPath string, opts Options) error {
 
 	errs := RunParallel(ctx, opts.Concurrency, len(planFile.Artifacts), func(ctx context.Context, i int) error {
 		artifact := planFile.Artifacts[i]
+		pt.MarkRunning(i)
 		var combinedOutput bytes.Buffer
 
 		for _, step := range artifact.Steps {
@@ -90,6 +100,7 @@ func ApplyWithOptions(configPath string, opts Options) error {
 					output: combinedOutput.String(),
 					err:    fmt.Errorf("%s: %w", step.Name, execErr),
 				}
+				pt.MarkFailed(i, execErr, combinedOutput.String())
 				return execErr
 			}
 		}
@@ -98,22 +109,20 @@ func ApplyWithOptions(configPath string, opts Options) error {
 			name:   artifact.Name,
 			output: combinedOutput.String(),
 		}
+		pt.MarkDone(i)
 		return nil
 	})
 
-	// Print results in order and update lock file for successful deployments
+	pt.Stop()
+
+	// Update lock file for successful deployments
 	var failures []string
 	deployed := 0
 	for i, res := range results {
 		artifact := planFile.Artifacts[i]
 		if res.err != nil {
-			p.FailureWithOutput(fmt.Sprintf("%s → %s — %s", res.name, artifact.Target, res.err), res.output)
 			failures = append(failures, res.name)
 		} else {
-			p.Success(fmt.Sprintf("%s → %s", res.name, artifact.Target))
-			if opts.Verbose && res.output != "" {
-				p.ErrorBox(res.output)
-			}
 			deployed++
 
 			// Update lock file
@@ -164,6 +173,7 @@ func ApplyWithOptions(configPath string, opts Options) error {
 	config.RemovePlan(rootPath)
 
 	// Summary
+	totalTime := pt.TotalElapsed()
 	parts := []string{}
 	if deployed > 0 {
 		parts = append(parts, p.SummaryDeployed(deployed))
@@ -174,6 +184,7 @@ func ApplyWithOptions(configPath string, opts Options) error {
 	if planFile.TotalSkips > 0 {
 		parts = append(parts, p.SummarySkipped(planFile.TotalSkips))
 	}
+	parts = append(parts, p.dim(fmt.Sprintf("⏱ %s", formatDuration(totalTime))))
 	p.Summary(parts...)
 
 	if len(failedErrs) > 0 {

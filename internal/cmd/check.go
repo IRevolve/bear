@@ -33,15 +33,28 @@ func Check(configPath string) error {
 
 	p.BearHeader("Check")
 
+	checkSteps := []string{
+		"Loading config",
+		"Checking languages",
+		"Checking targets",
+		"Scanning artifacts",
+		"Checking dependencies",
+		"Checking for cycles",
+	}
+
+	pt := NewProgressTracker(p, "Validating configuration", checkSteps)
+	pt.Start()
+
 	// 1. Load config
-	p.Printf("  Loading config... ")
+	pt.MarkRunning(0)
 	cfg, err := internal.Load(configPath)
 	if err != nil {
-		p.Println(p.red("✗"))
 		result.AddError("Failed to load config: %v", err)
+		pt.MarkFailed(0, err, "")
+		pt.Stop()
 		return printCheckResult(p, result)
 	}
-	p.Printf("%s %s\n", p.green("✓"), cfg.Name)
+	pt.MarkDone(0)
 
 	rootPath := filepath.Dir(configPath)
 	if rootPath == "." {
@@ -49,54 +62,45 @@ func Check(configPath string) error {
 	}
 
 	// 2. Check languages
-	p.Printf("  Checking languages... ")
+	pt.MarkRunning(1)
 	if len(cfg.Languages) == 0 {
 		result.AddWarning("No languages defined")
-		p.Println(p.yellow("none defined"))
 	} else {
-		p.Printf("%s %d defined\n", p.green("✓"), len(cfg.Languages))
 		for name, lang := range cfg.Languages {
 			if len(lang.Detection.Files) == 0 && lang.Detection.Pattern == "" {
 				result.AddWarning("Language '%s' has no detection rules", name)
 			}
 		}
 	}
+	pt.MarkDone(1)
 
 	// 3. Check targets
-	p.Printf("  Checking targets... ")
+	pt.MarkRunning(2)
 	if len(cfg.Targets) == 0 {
 		result.AddWarning("No targets defined")
-		p.Println(p.yellow("none defined"))
-	} else {
-		p.Printf("%s %d defined\n", p.green("✓"), len(cfg.Targets))
 	}
 	targetNames := make(map[string]bool)
 	for name := range cfg.Targets {
 		targetNames[name] = true
 	}
+	pt.MarkDone(2)
 
 	// 4. Scan artifacts
-	p.Printf("  Scanning artifacts... ")
+	pt.MarkRunning(3)
 	artifacts, err := internal.ScanArtifacts(rootPath, cfg)
 	if err != nil {
-		p.Println(p.red("✗"))
 		result.AddError("Failed to scan artifacts: %v", err)
+		pt.MarkFailed(3, err, "")
+		pt.Stop()
 		return printCheckResult(p, result)
 	}
 	if len(artifacts) == 0 {
-		p.Println(p.yellow("none found"))
 		result.AddWarning("No artifacts found")
-	} else {
-		libs := 0
-		for _, a := range artifacts {
-			if a.Artifact.IsLib {
-				libs++
-			}
-		}
-		p.Printf("%s %d found (%d services, %d libraries)\n", p.green("✓"), len(artifacts), len(artifacts)-libs, libs)
 	}
+	pt.MarkDone(3)
 
-	// 5. Create artifact map
+	// 5. Create artifact map and check dependencies
+	pt.MarkRunning(4)
 	artifactMap := make(map[string]internal.DiscoveredArtifact)
 	for _, a := range artifacts {
 		if existing, ok := artifactMap[a.Artifact.Name]; ok {
@@ -106,16 +110,12 @@ func Check(configPath string) error {
 		artifactMap[a.Artifact.Name] = a
 	}
 
-	// 6. Check each artifact
-	p.Printf("  Checking dependencies... ")
 	depErrors := 0
 	for _, a := range artifacts {
-		// Check language detection
 		if a.Language == "unknown" {
 			result.AddWarning("Artifact '%s' has unknown language", a.Artifact.Name)
 		}
 
-		// Check target (only for non-libs)
 		if !a.Artifact.IsLib {
 			if a.Artifact.Target == "" {
 				result.AddError("Artifact '%s' has no target defined", a.Artifact.Name)
@@ -125,7 +125,6 @@ func Check(configPath string) error {
 			}
 		}
 
-		// Check dependencies
 		for _, dep := range a.Artifact.Depends {
 			if _, ok := artifactMap[dep]; !ok {
 				result.AddError("Artifact '%s' depends on unknown artifact '%s'",
@@ -134,24 +133,25 @@ func Check(configPath string) error {
 			}
 		}
 	}
-	if depErrors == 0 {
-		p.Printf("%s all resolved\n", p.green("✓"))
+	if depErrors > 0 {
+		pt.MarkFailed(4, fmt.Errorf("%d unresolved dependencies", depErrors), "")
 	} else {
-		p.Printf("%s %d unresolved\n", p.red("✗"), depErrors)
+		pt.MarkDone(4)
 	}
 
-	// 7. Check for circular dependencies
-	p.Printf("  Checking for cycles... ")
+	// 6. Check for circular dependencies
+	pt.MarkRunning(5)
 	cycles := findCycles(artifacts)
 	if len(cycles) > 0 {
-		p.Println(p.red("✗"))
 		for _, cycle := range cycles {
 			result.AddError("Circular dependency: %s", strings.Join(cycle, " → "))
 		}
+		pt.MarkFailed(5, fmt.Errorf("circular dependencies found"), "")
 	} else {
-		p.Printf("%s none\n", p.green("✓"))
+		pt.MarkDone(5)
 	}
 
+	pt.Stop()
 	p.Blank()
 	return printCheckResult(p, result)
 }
