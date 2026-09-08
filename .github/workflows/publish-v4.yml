@@ -1,0 +1,63 @@
+name: Publish v4.0.0 Binaries
+
+# Recover the verified tag build without moving the immutable release tag.
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/publish-v4.yml]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: v4.0.0
+      - name: Verify original release build
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const run_id = 34215632187;
+            const expected = 'f3073bf2d57eeb4a3a4ad477731d4943c46d752d';
+            const repo = context.repo;
+            const {data: run} = await github.rest.actions.getWorkflowRun({...repo, run_id});
+            const {data: tag} = await github.rest.repos.getCommit({...repo, ref: 'v4.0.0'});
+            if (run.head_sha !== expected || tag.sha !== expected || run.head_branch !== 'v4.0.0') {
+              throw new Error('Release source does not match the approved v4.0.0 tag');
+            }
+            const jobs = await github.paginate(github.rest.actions.listJobsForWorkflowRun, {...repo, run_id});
+            const builds = jobs.filter(j => j.name.startsWith('build ('));
+            const checks = jobs.filter(j => j.name.startsWith('verify /'));
+            if (builds.length !== 5 || checks.length < 6 || [...builds, ...checks].some(j => j.conclusion !== 'success')) {
+              throw new Error('Original binary builds and verification must all succeed');
+            }
+      - uses: actions/download-artifact@v4
+        with:
+          run-id: 34215632187
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          pattern: bear-*
+          path: artifacts
+          merge-multiple: true
+      - name: Verify binary set
+        run: |
+          for binary in bear-linux-amd64 bear-linux-arm64 bear-darwin-amd64 bear-darwin-arm64 bear-windows-amd64.exe; do
+            test -s "artifacts/$binary"
+          done
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v4.0.0
+          target_commitish: f3073bf2d57eeb4a3a4ad477731d4943c46d752d
+          files: artifacts/bear-*
+          fail_on_unmatched_files: true
+          body_path: docs/releases/v4.0.0.md
+          generate_release_notes: true
+          prerelease: false
+          make_latest: true
