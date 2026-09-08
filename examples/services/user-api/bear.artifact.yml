@@ -1,5 +1,6 @@
 name: user-api
 target: cloudrun
+environments: [dev, int, prd]
 depends: [shared-go]
 
 vars:

@@ -3,181 +3,95 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
 
-func TestLoadLock_NewFile(t *testing.T) {
-	tmpDir, err := os.MkdirTemp("", "bear-test-*")
+func TestLockEnvironmentHistory(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "bear.lock.yml")
+	lock, err := LoadLock(path)
+	if err != nil || lock.Environments == nil || len(lock.Environments) != 0 {
+		t.Fatalf("new lock: %+v, %v", lock, err)
+	}
+	lock.UpdateArtifactPinned("dev", "api", "dev-commit", "local", "v1")
+	if lock.GetLastDeployedCommit("prd", "api") != "" || lock.IsPinned("prd", "api") {
+		t.Fatal("dev history leaked into prd")
+	}
+	lock.UpdateArtifact("prd", "api", "prd-commit", "remote", "v2")
+	if !lock.IsPinned("dev", "api") || lock.IsPinned("prd", "api") {
+		t.Fatal("pins must be scoped to their environment")
+	}
+	entry, ok := lock.GetArtifact("dev", "api")
+	if !ok || entry.Commit != "dev-commit" || entry.Target != "local" || entry.Version != "v1" {
+		t.Fatalf("unexpected history: %+v", entry)
+	}
+	stamp, err := time.Parse(time.RFC3339, entry.Timestamp)
+	if err != nil || time.Since(stamp) > time.Minute {
+		t.Fatalf("invalid timestamp %q: %v", entry.Timestamp, err)
+	}
+	if err := lock.Save(path); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := LoadLock(path)
 	if err != nil {
-		t.Fatalf("failed to create temp dir: %v", err)
+		t.Fatal(err)
 	}
-	defer os.RemoveAll(tmpDir)
-
-	lockPath := filepath.Join(tmpDir, "bear.lock.yml")
-
-	// Load non-existent file should create empty lock
-	lock, err := LoadLock(lockPath)
-	if err != nil {
-		t.Fatalf("LoadLock failed: %v", err)
+	if loaded.GetLastDeployedCommit("prd", "api") != "prd-commit" || !loaded.IsPinned("dev", "api") {
+		t.Fatalf("round trip lost history: %+v", loaded)
 	}
-
-	if lock.Artifacts == nil {
-		t.Error("expected Artifacts map to be initialized")
+	data, err := os.ReadFile(path)
+	if err != nil || !strings.Contains(string(data), "environments:") || strings.Contains(string(data), "artifacts:") {
+		t.Fatalf("unexpected schema: %s (%v)", data, err)
 	}
-	if len(lock.Artifacts) != 0 {
-		t.Errorf("expected 0 artifacts, got %d", len(lock.Artifacts))
+	loaded.UpdateArtifact("dev", "api", "new", "local", "v3")
+	if loaded.IsPinned("dev", "api") || loaded.GetLastDeployedCommit("prd", "api") != "prd-commit" {
+		t.Fatal("update must unpin only the updated environment")
 	}
 }
 
-func TestLoadLock_ExistingFile(t *testing.T) {
-	tmpDir, err := os.MkdirTemp("", "bear-test-*")
+func TestLockLegacyHistoryIsNotEnvironmentHistory(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "bear.lock.yml")
+	if err := os.WriteFile(path, []byte("artifacts:\n  api:\n    commit: old\n    pinned: true\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	lock, err := LoadLock(path)
 	if err != nil {
-		t.Fatalf("failed to create temp dir: %v", err)
+		t.Fatal(err)
 	}
-	defer os.RemoveAll(tmpDir)
-
-	lockContent := `artifacts:
-  user-api:
-    commit: abc1234
-    timestamp: "2026-01-01T10:00:00Z"
-    version: v1.0.0
-    target: cloudrun
-    pinned: true
-`
-	lockPath := filepath.Join(tmpDir, "bear.lock.yml")
-	if err := os.WriteFile(lockPath, []byte(lockContent), 0644); err != nil {
-		t.Fatalf("failed to write lock: %v", err)
+	for _, environment := range []string{"dev", "int", "prd"} {
+		if _, ok := lock.GetArtifact(environment, "api"); ok || lock.IsPinned(environment, "api") || lock.GetLastDeployedCommit(environment, "api") != "" {
+			t.Fatalf("legacy history inferred for %s", environment)
+		}
 	}
-
-	lock, err := LoadLock(lockPath)
-	if err != nil {
-		t.Fatalf("LoadLock failed: %v", err)
+	lock.UpdateArtifact("dev", "api", "new", "local", "")
+	if err := lock.Save(path); err != nil {
+		t.Fatal(err)
 	}
-
-	if len(lock.Artifacts) != 1 {
-		t.Errorf("expected 1 artifact, got %d", len(lock.Artifacts))
-	}
-
-	entry, ok := lock.Artifacts["user-api"]
-	if !ok {
-		t.Fatal("expected 'user-api' artifact")
-	}
-	if entry.Commit != "abc1234" {
-		t.Errorf("expected commit 'abc1234', got '%s'", entry.Commit)
-	}
-	if !entry.Pinned {
-		t.Error("expected artifact to be pinned")
+	loaded, err := LoadLock(path)
+	if err != nil || loaded.Artifacts["api"].Commit != "old" || loaded.GetLastDeployedCommit("dev", "api") != "new" {
+		t.Fatalf("migration data not preserved: %+v, %v", loaded, err)
 	}
 }
 
-func TestLockFile_GetLastDeployedCommit(t *testing.T) {
-	lock := &LockFile{
-		Artifacts: map[string]LockEntry{
-			"api": {Commit: "abc123"},
-		},
+func TestLockZeroValueAndErrors(t *testing.T) {
+	lock := &LockFile{}
+	lock.UpdateArtifactPinned("dev", "api", "commit", "local", "")
+	if !lock.IsPinned("dev", "api") {
+		t.Fatal("zero value update failed")
 	}
-
-	// Existing artifact
-	commit := lock.GetLastDeployedCommit("api")
-	if commit != "abc123" {
-		t.Errorf("expected 'abc123', got '%s'", commit)
+	root := t.TempDir()
+	if _, err := LoadLock(root); err == nil {
+		t.Fatal("expected read error")
 	}
-
-	// Non-existent artifact
-	commit = lock.GetLastDeployedCommit("nonexistent")
-	if commit != "" {
-		t.Errorf("expected empty string, got '%s'", commit)
+	if err := lock.Save(root); err == nil {
+		t.Fatal("expected write error")
 	}
-}
-
-func TestLockFile_IsPinned(t *testing.T) {
-	lock := &LockFile{
-		Artifacts: map[string]LockEntry{
-			"pinned-api":   {Pinned: true},
-			"unpinned-api": {Pinned: false},
-		},
+	path := filepath.Join(root, "invalid.yml")
+	if err := os.WriteFile(path, []byte("environments: ["), 0644); err != nil {
+		t.Fatal(err)
 	}
-
-	if !lock.IsPinned("pinned-api") {
-		t.Error("expected pinned-api to be pinned")
-	}
-	if lock.IsPinned("unpinned-api") {
-		t.Error("expected unpinned-api to not be pinned")
-	}
-	if lock.IsPinned("nonexistent") {
-		t.Error("expected nonexistent to not be pinned")
-	}
-}
-
-func TestLockFile_UpdateArtifact(t *testing.T) {
-	lock := &LockFile{Artifacts: make(map[string]LockEntry)}
-
-	lock.UpdateArtifact("my-service", "abc123", "cloudrun", "v1.0")
-
-	entry, ok := lock.Artifacts["my-service"]
-	if !ok {
-		t.Fatal("expected artifact to exist")
-	}
-	if entry.Commit != "abc123" {
-		t.Errorf("expected commit 'abc123', got '%s'", entry.Commit)
-	}
-	if entry.Target != "cloudrun" {
-		t.Errorf("expected target 'cloudrun', got '%s'", entry.Target)
-	}
-	if entry.Pinned {
-		t.Error("expected artifact to not be pinned")
-	}
-
-	// Check timestamp is recent
-	ts, err := time.Parse(time.RFC3339, entry.Timestamp)
-	if err != nil {
-		t.Fatalf("invalid timestamp format: %v", err)
-	}
-	if time.Since(ts) > time.Minute {
-		t.Error("timestamp should be recent")
-	}
-}
-
-func TestLockFile_UpdateArtifactPinned(t *testing.T) {
-	lock := &LockFile{Artifacts: make(map[string]LockEntry)}
-
-	lock.UpdateArtifactPinned("my-service", "abc123", "cloudrun", "v1.0")
-
-	entry, ok := lock.Artifacts["my-service"]
-	if !ok {
-		t.Fatal("expected artifact to exist")
-	}
-	if !entry.Pinned {
-		t.Error("expected artifact to be pinned")
-	}
-}
-
-func TestLockFile_Save(t *testing.T) {
-	tmpDir, err := os.MkdirTemp("", "bear-test-*")
-	if err != nil {
-		t.Fatalf("failed to create temp dir: %v", err)
-	}
-	defer os.RemoveAll(tmpDir)
-
-	lock := &LockFile{
-		Artifacts: map[string]LockEntry{
-			"test": {Commit: "xyz789", Target: "docker"},
-		},
-	}
-
-	lockPath := filepath.Join(tmpDir, "bear.lock.yml")
-	if err := lock.Save(lockPath); err != nil {
-		t.Fatalf("Save failed: %v", err)
-	}
-
-	// Load it back
-	loaded, err := LoadLock(lockPath)
-	if err != nil {
-		t.Fatalf("LoadLock failed: %v", err)
-	}
-
-	if loaded.Artifacts["test"].Commit != "xyz789" {
-		t.Errorf("expected commit 'xyz789', got '%s'", loaded.Artifacts["test"].Commit)
+	if _, err := LoadLock(path); err == nil {
+		t.Fatal("expected YAML error")
 	}
 }

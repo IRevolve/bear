@@ -2,13 +2,8 @@
   "name": "@acme/ui",
   "version": "1.0.0",
   "private": false,
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
-  "scripts": {
-    "build": "tsc",
-    "lint": "eslint src/",
-    "test": "vitest"
-  },
+  "main": "src/Button.tsx",
+  "types": "src/Button.tsx",
   "peerDependencies": {
     "react": "^18.0.0"
   }

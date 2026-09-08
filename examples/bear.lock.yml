@@ -1,4 +1,5 @@
-# Bear Lock File - tracks deployed artifact versions
+# Legacy example history with placeholder revisions; not real deployments.
+# Replan per environment; do not automatically map these entries to environments.
 # Do not edit manually
 
 artifacts:

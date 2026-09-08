@@ -19,7 +19,7 @@ languages:
       files: [package.json]
     steps:
       - name: Install
-        run: npm install --prefer-offline
+        run: npm install --prefer-offline --package-lock=false
       - name: Lint
         run: npm run lint --if-present
       - name: Test
@@ -36,7 +36,7 @@ languages:
       - name: Syntax Check
         run: python3 -m py_compile *.py
       - name: Test
-        run: python3 -m pytest --tb=short 2>/dev/null || python3 -c "print('No pytest, skipping')"
+        run: python3 -m unittest discover -v
 
 targets:
   cloudrun:
@@ -53,6 +53,7 @@ targets:
           gcloud run deploy $NAME \
             --image gcr.io/$PROJECT/$NAME:$VERSION \
             --region $REGION \
+            --port 8080 \
             --memory $MEMORY
 
   cloudrun-job:

@@ -10,11 +10,13 @@ import (
 
 // PlanArtifact represents a single artifact in the plan file
 type PlanArtifact struct {
+	Completed    bool              `yaml:"completed,omitempty"`
 	Name         string            `yaml:"name"`
 	Path         string            `yaml:"path"`
 	Language     string            `yaml:"language"`
 	Target       string            `yaml:"target,omitempty"`
-	Action       string            `yaml:"action"` // "deploy" or "skip"
+	Environments []string          `yaml:"environments,omitempty"` // Snapshotted deployment allowlist
+	Action       string            `yaml:"action"`                 // "deploy" or "skip"
 	Reason       string            `yaml:"reason"`
 	ChangedFiles []string          `yaml:"changed_files,omitempty"`
 	Vars         map[string]string `yaml:"vars,omitempty"`
@@ -22,6 +24,14 @@ type PlanArtifact struct {
 	Pinned       bool              `yaml:"pinned,omitempty"`
 	PinCommit    string            `yaml:"pin_commit,omitempty"`
 	IsLib        bool              `yaml:"is_lib,omitempty"`
+}
+
+// PlanValidation records the setup and validation needed to reproduce a pinned checkout.
+type PlanValidation struct {
+	Name  string            `yaml:"name"`
+	Path  string            `yaml:"path"`
+	Vars  map[string]string `yaml:"vars,omitempty"`
+	Steps []Step            `yaml:"steps,omitempty"`
 }
 
 // PlanSkipped represents a skipped artifact
@@ -32,13 +42,17 @@ type PlanSkipped struct {
 
 // PlanFile is the serializable plan written to .bear/plan.yml
 type PlanFile struct {
-	CreatedAt  string         `yaml:"created_at"`
-	Commit     string         `yaml:"commit"`
-	Artifacts  []PlanArtifact `yaml:"artifacts"`
-	Skipped    []PlanSkipped  `yaml:"skipped,omitempty"`
-	Validated  int            `yaml:"validated"`
-	ToDeploy   int            `yaml:"to_deploy"`
-	TotalSkips int            `yaml:"total_skipped"`
+	SourceFingerprint string           `yaml:"source_fingerprint"`
+	Pinned            bool             `yaml:"pinned,omitempty"`
+	Validations       []PlanValidation `yaml:"validations,omitempty"`
+	Environment       string           `yaml:"environment,omitempty"`
+	CreatedAt         string           `yaml:"created_at"`
+	Commit            string           `yaml:"commit"`
+	Artifacts         []PlanArtifact   `yaml:"artifacts"`
+	Skipped           []PlanSkipped    `yaml:"skipped,omitempty"`
+	Validated         int              `yaml:"validated"`
+	ToDeploy          int              `yaml:"to_deploy"`
+	TotalSkips        int              `yaml:"total_skipped"`
 }
 
 // NewPlanFile creates a new PlanFile with current timestamp
@@ -62,7 +76,7 @@ func PlanFilePath(rootPath string) string {
 // WritePlan writes the plan file to .bear/plan.yml
 func WritePlan(rootPath string, plan *PlanFile) error {
 	dir := BearDir(rootPath)
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	if err := os.MkdirAll(dir, 0700); err != nil {
 		return err
 	}
 
@@ -71,7 +85,7 @@ func WritePlan(rootPath string, plan *PlanFile) error {
 		return err
 	}
 
-	return os.WriteFile(PlanFilePath(rootPath), data, 0644)
+	return WriteFileAtomic(PlanFilePath(rootPath), data, 0600)
 }
 
 // ReadPlan reads the plan file from .bear/plan.yml

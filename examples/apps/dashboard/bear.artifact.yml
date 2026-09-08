@@ -1,5 +1,6 @@
 name: dashboard
 target: s3-static
+environments: [dev, int, prd]
 depends: [ui-components, user-api, order-api]
 
 vars:

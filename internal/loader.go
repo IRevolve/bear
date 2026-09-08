@@ -22,6 +22,11 @@ func Load(path string) (*config.Config, error) {
 	if err := resolveTargets(cfg); err != nil {
 		return nil, err
 	}
+	for name, target := range cfg.Targets {
+		if len(target.Steps) == 0 {
+			return nil, fmt.Errorf("target %q has no deployment steps", name)
+		}
+	}
 
 	return cfg, nil
 }
@@ -32,7 +37,7 @@ func resolveLanguages(cfg *config.Config) error {
 		return nil
 	}
 
-	manager := NewManager()
+	manager := NewManager(cfg.Use.Revision)
 
 	// Initialize map if nil
 	if cfg.Languages == nil {
@@ -44,7 +49,7 @@ func resolveLanguages(cfg *config.Config) error {
 		if _, exists := cfg.Languages[name]; !exists {
 			preset, err := manager.GetLanguage(name)
 			if err != nil {
-				return fmt.Errorf("unknown language preset: %s (run 'bear preset update' to refresh cache)", name)
+				return fmt.Errorf("language preset %q: %w", name, err)
 			}
 			preset.Name = name
 			cfg.Languages[name] = preset
@@ -60,7 +65,7 @@ func resolveTargets(cfg *config.Config) error {
 		return nil
 	}
 
-	manager := NewManager()
+	manager := NewManager(cfg.Use.Revision)
 
 	// Initialize map if nil
 	if cfg.Targets == nil {
@@ -72,7 +77,7 @@ func resolveTargets(cfg *config.Config) error {
 		if _, exists := cfg.Targets[name]; !exists {
 			preset, err := manager.GetTarget(name)
 			if err != nil {
-				return fmt.Errorf("unknown target preset: %s (run 'bear preset update' to refresh cache)", name)
+				return fmt.Errorf("target preset %q: %w", name, err)
 			}
 			preset.Name = name
 			cfg.Targets[name] = preset

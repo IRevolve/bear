@@ -171,17 +171,15 @@ func findCycles(artifacts []internal.DiscoveredArtifact) [][]string {
 	recStack := make(map[string]bool)
 	var path []string
 
-	var dfs func(node string) bool
-	dfs = func(node string) bool {
+	var dfs func(node string)
+	dfs = func(node string) {
 		visited[node] = true
 		recStack[node] = true
 		path = append(path, node)
 
 		for _, dep := range deps[node] {
 			if !visited[dep] {
-				if dfs(dep) {
-					return true
-				}
+				dfs(dep)
 			} else if recStack[dep] {
 				// Cycle found - extract the cycle path
 				cycleStart := -1
@@ -192,16 +190,14 @@ func findCycles(artifacts []internal.DiscoveredArtifact) [][]string {
 					}
 				}
 				if cycleStart >= 0 {
-					cycle := append(path[cycleStart:], dep)
+					cycle := append(append([]string{}, path[cycleStart:]...), dep)
 					cycles = append(cycles, cycle)
 				}
-				return true
 			}
 		}
 
 		path = path[:len(path)-1]
 		recStack[node] = false
-		return false
 	}
 
 	for _, a := range artifacts {

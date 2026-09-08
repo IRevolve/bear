@@ -1,0 +1,89 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: go test ./...
+      - run: go vet ./...
+      - run: go test -race ./...
+
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install PyYAML mkdocs-material
+      - run: python3 -m unittest discover -s .github/scripts -p 'test_*.py' -v
+      - run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.7
+      - run: sudo apt-get update && sudo apt-get install -y groovy
+      - run: groovy .github/scripts/validate.groovy
+      - run: mkdocs build --strict
+
+  examples:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: npm install --package-lock=false && npm run build
+        working-directory: examples/apps/dashboard
+      - run: python3 -m unittest discover -v
+        working-directory: examples/functions/stripe-webhook
+      - name: Build example service images without publishing
+        run: |
+          for service in user-api order-api email-worker; do
+            docker build -t "bear-example-$service:ci" "examples/services/$service"
+          done
+      - name: Build and smoke-test GitHub webhook HTTP image
+        run: |
+          docker build -t bear-example-github-webhook:ci examples/functions/github-webhook
+          docker run -d --name github-webhook -p 127.0.0.1:8080:8080 bear-example-github-webhook:ci
+          trap 'docker logs github-webhook; docker rm -f github-webhook' EXIT
+          response=$(curl --fail --silent --show-error --retry 10 --retry-connrefused --retry-delay 1 --max-time 5 \
+            -H 'Content-Type: application/json' \
+            -d '{"action":"opened","repository":{"full_name":"acme/example"}}' \
+            http://127.0.0.1:8080/webhook)
+          test "$response" = '{"status": "ok"}'
+
+  docker:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        dockerfile: [Dockerfile, Dockerfile.alpine, Dockerfile.debian]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          load: true
+          push: false
+          tags: bear:ci
+      - run: docker run --rm bear:ci --version
+      - name: CI entrypoint override
+        if: matrix.dockerfile != 'Dockerfile'
+        run: docker run --rm --entrypoint /bin/sh bear:ci -ec 'git --version; bear --version'

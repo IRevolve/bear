@@ -1,0 +1,9 @@
+# Validation agent; extend with target-specific deployment CLIs before applying.
+ARG BEAR_IMAGE=ghcr.io/irevolve/bear:debian
+FROM ${BEAR_IMAGE} AS bear
+FROM golang:1.25-bookworm
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates git nodejs npm python3 \
+    && rm -rf /var/lib/apt/lists/*
+COPY --from=bear /usr/local/bin/bear /usr/local/bin/bear
+ENTRYPOINT ["bear"]

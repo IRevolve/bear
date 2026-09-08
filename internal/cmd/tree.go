@@ -31,12 +31,26 @@ func Tree(configPath string, filterArtifacts []string) error {
 
 	// Load lock file for status info
 	lockPath := filepath.Join(rootPath, "bear.lock.yml")
-	lockFile, _ := config.LoadLock(lockPath)
+	lockFile, err := config.LoadLock(lockPath)
+	if err != nil {
+		return fmt.Errorf("error loading lock: %w", err)
+	}
 
 	// Build artifact map
 	artifactMap := make(map[string]internal.DiscoveredArtifact)
 	for _, a := range artifacts {
+		if _, exists := artifactMap[a.Artifact.Name]; exists {
+			return fmt.Errorf("duplicate artifact name %q", a.Artifact.Name)
+		}
 		artifactMap[a.Artifact.Name] = a
+	}
+	if cycles := findCycles(artifacts); len(cycles) > 0 {
+		return fmt.Errorf("circular dependency: %s", strings.Join(cycles[0], " -> "))
+	}
+	for _, name := range filterArtifacts {
+		if _, ok := artifactMap[name]; !ok {
+			return fmt.Errorf("unknown artifact %q", name)
+		}
 	}
 
 	// Build reverse dependency map (who depends on me?)
@@ -125,7 +139,7 @@ func printFullDependencyTree(p *Printer, artifacts []internal.DiscoveredArtifact
 
 			// Dependencies
 			if len(a.Artifact.Depends) > 0 {
-				deps := a.Artifact.Depends
+				deps := append([]string{}, a.Artifact.Depends...)
 				sort.Strings(deps)
 				for i, dep := range deps {
 					connector := "├─"
@@ -147,11 +161,22 @@ func getStatus(p *Printer, a internal.DiscoveredArtifact, lockFile *config.LockF
 	if lockFile == nil {
 		return ""
 	}
-	if lockFile.IsPinned(a.Artifact.Name) {
-		return p.yellow(" 📌")
+	var statuses []string
+	for _, environment := range []string{"dev", "int", "prd"} {
+		if entry, ok := lockFile.Environments[environment][a.Artifact.Name]; ok {
+			version := entry.Version
+			if version == "" {
+				version = entry.Commit
+			}
+			status := environment + ": " + version
+			if entry.Pinned {
+				status += " (pinned)"
+			}
+			statuses = append(statuses, status)
+		}
 	}
-	if entry, ok := lockFile.Artifacts[a.Artifact.Name]; ok {
-		return p.dim(fmt.Sprintf(" [%s]", entry.Version))
+	if len(statuses) > 0 {
+		return p.dim(" [" + strings.Join(statuses, "; ") + "]")
 	}
 	return ""
 }
@@ -172,7 +197,7 @@ func printArtifactTree(p *Printer, a internal.DiscoveredArtifact, artifactMap ma
 	}
 
 	// Print dependencies
-	deps := a.Artifact.Depends
+	deps := append([]string{}, a.Artifact.Depends...)
 	if len(deps) > 0 {
 		sort.Strings(deps)
 		for i, depName := range deps {

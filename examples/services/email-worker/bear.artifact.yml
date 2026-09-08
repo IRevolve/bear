@@ -1,3 +1,4 @@
 name: email-worker
 target: cloudrun-job
+environments: [dev, int, prd]
 depends: [shared-go]

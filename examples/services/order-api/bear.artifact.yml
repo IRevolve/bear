@@ -1,5 +1,6 @@
 name: order-api
 target: cloudrun
+environments: [dev, int, prd]
 depends: [shared-go, user-api]
 
 vars:

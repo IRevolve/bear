@@ -1,7 +1,13 @@
 package cmd
 
+import "context"
+
 // Options contains all options for plan and apply
 type Options struct {
+	Context     context.Context
+	GitRemote   string
+	GitBranch   string
+	Environment string   // Explicit deployment environment for planning
 	Artifacts   []string // Specific artifacts to select
 	PinCommit   string   // Commit to pin artifact(s) to
 	Force       bool     // Ignore pinned artifacts

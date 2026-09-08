@@ -1,7 +1,11 @@
 package commands
 
 import (
+	"context"
 	"fmt"
+	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/irevolve/bear/internal"
 	"github.com/spf13/cobra"
@@ -36,12 +40,14 @@ Usage:
   bear check                     Validate configuration and dependencies
   bear list                      List all artifacts
   bear list --tree               Show dependency tree
-  bear plan                      Validate changes and create deployment plan
+  bear plan dev                  Validate changes and create deployment plan
   bear apply                     Execute the deployment plan`,
 }
 
 func Execute() error {
-	return rootCmd.Execute()
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	return rootCmd.ExecuteContext(ctx)
 }
 
 func init() {

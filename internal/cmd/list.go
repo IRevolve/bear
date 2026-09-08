@@ -4,9 +4,11 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/irevolve/bear/internal"
+	"github.com/irevolve/bear/internal/config"
 )
 
 func List(configPath string) error {
@@ -26,6 +28,10 @@ func List(configPath string) error {
 	artifacts, err := internal.ScanArtifacts(rootPath, cfg)
 	if err != nil {
 		return fmt.Errorf("error scanning artifacts: %w", err)
+	}
+	lockFile, err := config.LoadLock(filepath.Join(rootPath, "bear.lock.yml"))
+	if err != nil {
+		return fmt.Errorf("error loading lock: %w", err)
 	}
 
 	if len(artifacts) == 0 {
@@ -48,12 +54,20 @@ func List(configPath string) error {
 
 		if !a.Artifact.IsLib {
 			p.Detail("Target:  ", a.Artifact.Target)
+			if status := getStatus(p, a, lockFile); status != "" {
+				p.Detail("Deployed:", status)
+			}
 		}
 
 		if len(a.Artifact.Vars) > 0 {
 			p.Detail("Vars:    ", "")
-			for k, v := range a.Artifact.Vars {
-				p.Printf("               %s\n", p.dim(fmt.Sprintf("%s: %s", k, v)))
+			keys := make([]string, 0, len(a.Artifact.Vars))
+			for k := range a.Artifact.Vars {
+				keys = append(keys, k)
+			}
+			sort.Strings(keys)
+			for _, k := range keys {
+				p.Printf("               %s\n", p.dim(fmt.Sprintf("%s: %s", k, a.Artifact.Vars[k])))
 			}
 		}
 

@@ -1,65 +1,67 @@
-// Bear CI/CD Pipeline for Jenkins (Docker-based)
-// 
-// This pipeline uses the official Bear Docker image for simpler setup.
-// No Go installation required.
-
+// Build examples/Dockerfile.ci as your-registry/bear-ci:reviewed first.
+// Includes validation tools, NOT cloud deployment CLIs or Docker daemon access.
 pipeline {
     agent {
         docker {
-            image 'ghcr.io/irevolve/bear:latest-alpine'
-            args '-v /var/run/docker.sock:/var/run/docker.sock'
+            image 'your-registry/bear-ci:reviewed'
+            args '--entrypoint=""'
         }
     }
-
     options {
-        skipDefaultCheckout(false)
         timestamps()
         disableConcurrentBuilds()
     }
-
+    environment {
+        GIT_AUTHOR_NAME = 'Bear CI'
+        GIT_AUTHOR_EMAIL = 'bear-ci@example.com'
+        GIT_COMMITTER_NAME = 'Bear CI'
+        GIT_COMMITTER_EMAIL = 'bear-ci@example.com'
+    }
     stages {
-        stage('Check Skip CI') {
+        stage('Check') {
             steps {
                 script {
-                    def commitMsg = sh(script: 'git log -1 --pretty=%B', returnStdout: true).trim()
-                    if (commitMsg.contains('[skip ci]')) {
-                        echo 'Skipping build - lock file update detected'
-                        currentBuild.result = 'NOT_BUILT'
-                        error('Skipping build due to [skip ci] in commit message')
+                    env.LOCK_ONLY = sh(
+                        script: 'sh examples/ci/skip-lock-only.sh "${GIT_PREVIOUS_COMMIT:-}" "$GIT_AUTHOR_EMAIL"',
+                        returnStatus: true
+                    ) == 0 ? 'true' : 'false'
+                }
+            }
+        }
+        stage('Plan') {
+            when { expression { env.LOCK_ONLY != 'true' } }
+            steps {
+                dir('examples') { sh 'bear plan prd' }
+            }
+        }
+        stage('Deploy') {
+            when {
+                allOf {
+                    branch 'main'
+                    not { changeRequest() }
+                    expression { env.LOCK_ONLY != 'true' }
+                }
+            }
+            steps {
+                withCredentials([gitUsernamePassword(
+                    credentialsId: 'git-credentials', gitToolName: 'Default'
+                )]) {
+                    dir('examples') {
+                        sh '''
+                            set -eu
+                            test -z "${CHANGE_ID:-}"
+                            test "$BRANCH_NAME" = main
+                            git check-ref-format --branch "$BRANCH_NAME" >/dev/null
+                            bear apply --git-remote origin --git-branch "$BRANCH_NAME"
+                        '''
                     }
                 }
             }
         }
-
-        stage('Plan') {
-            steps {
-                // Detect changes, validate, and create deployment plan
-                sh 'bear plan'
-            }
-        }
-
-        stage('Deploy') {
-            when {
-                branch 'main'
-            }
-            steps {
-                withCredentials([usernamePassword(
-                    credentialsId: 'git-credentials',
-                    usernameVariable: 'GIT_USER',
-                    passwordVariable: 'GIT_TOKEN'
-                )]) {
-                    sh '''
-                        git remote set-url origin https://${GIT_USER}:${GIT_TOKEN}@github.com/your-org/your-repo.git
-                        bear apply
-                    '''
-                }
-            }
-        }
     }
-
     post {
-        always {
-            cleanWs()
-        }
+        failure { echo 'Bear failed; inspect deployment and Git state before retrying.' }
+        // Preserve failed deployment/Git state for operator recovery.
+        success { cleanWs() }
     }
 }

@@ -17,7 +17,8 @@ var listCmd = &cobra.Command{
 	Long: `List all discovered artifacts in the workspace.
 Shows each artifact's name, language, target, and dependencies.
 
-Use --tree to display as a dependency tree.
+Use --tree to display as a dependency tree. Artifact arguments select a tree.
+Deployment status is displayed separately for dev, int, and prd.
 
 Examples:
   bear list                # List all artifacts
@@ -36,7 +37,7 @@ Examples:
 			return fmt.Errorf("config file not found: %s", configPath)
 		}
 
-		if showTree {
+		if showTree || len(args) > 0 {
 			return cmd.Tree(configPath, args)
 		}
 		return cmd.List(configPath)

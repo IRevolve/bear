@@ -1,5 +1,6 @@
 name: stripe-webhook
 target: lambda
+environments: [dev, int, prd]
 
 vars:
   HANDLER: handler.main

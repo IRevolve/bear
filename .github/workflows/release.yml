@@ -2,19 +2,32 @@ name: Release
 
 on:
   push:
-    tags:
-      - "v*"
+    tags: ["v*"]
 
 permissions:
-  contents: write
-  packages: write
-
-env:
-  REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
+  contents: read
 
 jobs:
+  verify:
+    uses: ./.github/workflows/ci.yml
+
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      docker_version: ${{ steps.version.outputs.docker_version }}
+      minor: ${{ steps.version.outputs.minor }}
+      stable: ${{ steps.version.outputs.stable }}
+      prerelease: ${{ steps.version.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: version
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: python3 .github/scripts/release_policy.py "$RELEASE_TAG"
+
   build:
+    needs: [verify, version]
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -29,103 +42,85 @@ jobs:
             goarch: arm64
           - goos: windows
             goarch: amd64
-
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up Go
-        uses: actions/setup-go@v5
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
         with:
-          go-version: "1.25"
-
+          go-version-file: go.mod
       - name: Build
         env:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
+          VERSION: ${{ needs.version.outputs.version }}
         run: |
           ext=""
-          if [ "$GOOS" = "windows" ]; then
-            ext=".exe"
-          fi
-          VERSION=${GITHUB_REF_NAME#v}
-          go build -ldflags "-X github.com/irevolve/bear/commands.Version=${VERSION}" -o bear-${{ matrix.goos }}-${{ matrix.goarch }}${ext} .
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
+          if [ "$GOOS" = "windows" ]; then ext=".exe"; fi
+          CGO_ENABLED=0 go build -ldflags "-X github.com/irevolve/bear/commands.Version=${VERSION}" -o "bear-${GOOS}-${GOARCH}${ext}" .
+      - uses: actions/upload-artifact@v4
         with:
           name: bear-${{ matrix.goos }}-${{ matrix.goarch }}
           path: bear-*
 
   release:
-    needs: build
+    needs: [verify, version, build]
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
-      - name: Check if pre-release
-        id: prerelease
-        run: |
-          if [[ "${{ github.ref_name }}" =~ a$ ]]; then
-            echo "is_prerelease=true" >> $GITHUB_OUTPUT
-          else
-            echo "is_prerelease=false" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Download all artifacts
-        uses: actions/download-artifact@v4
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
         with:
           path: artifacts
           merge-multiple: true
-
-      - name: Create Release
-        uses: softprops/action-gh-release@v2
+      - uses: softprops/action-gh-release@v2
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
           files: artifacts/*
+          body_path: docs/releases/${{ github.ref_name }}.md
           generate_release_notes: true
-          prerelease: ${{ steps.prerelease.outputs.is_prerelease }}
+          prerelease: ${{ needs.version.outputs.prerelease == 'true' }}
+          make_latest: ${{ needs.version.outputs.stable }}
 
-  docker-variants:
+  docker:
+    needs: [verify, version, build]
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
     strategy:
       matrix:
         include:
+          - dockerfile: Dockerfile
+            suffix: ""
+            alias: latest
+            prerelease_prefix: scratch-
           - dockerfile: Dockerfile.alpine
             suffix: "-alpine"
+            alias: alpine
+            prerelease_prefix: alpine-
           - dockerfile: Dockerfile.debian
             suffix: "-debian"
+            alias: debian
+            prerelease_prefix: debian-
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v3
+      - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
         with:
-          registry: ${{ env.REGISTRY }}
+          registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Extract metadata for Docker
-        id: meta
+      - id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          flavor: |
-            suffix=${{ matrix.suffix }}
+          images: ghcr.io/${{ github.repository }}
+          flavor: latest=false
           tags: |
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=match,pattern=v(.*),group=1
-
-      - name: Build and push Docker image
-        uses: docker/build-push-action@v6
+            type=raw,value=${{ needs.version.outputs.prerelease == 'true' && matrix.prerelease_prefix || '' }}${{ needs.version.outputs.docker_version }}${{ matrix.suffix }}
+            type=raw,value=${{ needs.version.outputs.minor }}${{ matrix.suffix }},enable=${{ needs.version.outputs.stable == 'true' }}
+            type=raw,value=latest${{ matrix.suffix }},enable=${{ needs.version.outputs.stable == 'true' }}
+            type=raw,value=${{ matrix.alias }},enable=${{ needs.version.outputs.stable == 'true' && matrix.suffix != '' }}
+      - uses: docker/build-push-action@v6
         with:
           context: .
           file: ${{ matrix.dockerfile }}
@@ -133,52 +128,6 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          build-args: |
-            VERSION=${{ github.ref_name }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-  docker-scratch:
-    needs: docker-variants
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Extract metadata for Docker
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          tags: |
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=match,pattern=v(.*),group=1
-            type=raw,value=latest,enable=${{ !contains(github.ref_name, 'a') }}
-
-      - name: Build and push Docker image
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: Dockerfile
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          build-args: |
-            VERSION=${{ github.ref_name }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          build-args: VERSION=${{ needs.version.outputs.version }}
+          cache-from: type=gha,scope=${{ matrix.alias }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.alias }}
