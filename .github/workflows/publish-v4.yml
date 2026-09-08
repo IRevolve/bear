@@ -54,7 +54,7 @@ jobs:
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: v4.0.0
-          target_commitish: f3073bf2d57eeb4a3a4ad477731d4943c46d752d
+          # The existing tag was verified above; do not request creation at an older SHA.
           files: artifacts/bear-*
           fail_on_unmatched_files: true
           body_path: docs/releases/v4.0.0.md
