@@ -231,9 +231,11 @@ func sourceFingerprint(ctx context.Context, root string) (string, error) {
 // sourceState returns full HEAD, the working-source fingerprint, and whether
 // tracked/index or nonignored untracked source differs from HEAD. Dirty source
 // is reported, not rejected; only bear.lock.yml and .bear state are exempt.
-// Callers should reject dirty initial production plans and compare BOTH commit
-// and the post-validation fingerprint before any deployment. Generated outputs
-// may legitimately make the post-validation state dirty.
+// Plan calls this once, before running anything, to capture the commit and
+// fingerprint it saves to the plan file. Apply calls it once more, also before
+// running anything (apply never validates or builds before this check), to
+// confirm the source it is about to build and deploy still matches what plan
+// saw. Neither caller re-fingerprints afterward.
 func sourceState(ctx context.Context, root string) (commit, fingerprint string, dirty bool, err error) {
 	repo, _, err := sourceRepository(ctx, root)
 	if err != nil {

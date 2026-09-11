@@ -13,7 +13,7 @@ func TestLoaderUsesSelectedRevisionCache(t *testing.T) {
 	writeScannerFixture(t, filepath.Join(home, CacheDir, revision, "languages/go.yml"), upstreamGo)
 	writeScannerFixture(t, filepath.Join(home, CacheDir, revision, "targets/docker.yml"), upstreamDocker)
 	path := filepath.Join(t.TempDir(), "bear.config.yml")
-	writeScannerFixture(t, path, "name: project\nuse:\n  revision: "+revision+"\n  languages: [go]\n  targets: [docker]\n")
+	writeScannerFixture(t, path, "name: project\nenvironments: [dev]\nuse:\n  revision: "+revision+"\n  languages: [go]\n  targets: [docker]\n")
 	cfg, err := Load(path)
 	if err != nil {
 		t.Fatal(err)
@@ -27,6 +27,7 @@ func TestLoaderLocalOverridesPreset(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	path := filepath.Join(t.TempDir(), "bear.config.yml")
 	writeScannerFixture(t, path, `name: project
+environments: [dev]
 use:
   languages: [not-a-remote-language]
   targets: [not-a-remote-target]
@@ -45,7 +46,7 @@ targets:
 func TestLoaderPythonCorrectionPreservesLocalOverride(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	path := filepath.Join(t.TempDir(), "bear.config.yml")
-	writeScannerFixture(t, path, "name: project\nuse: {languages: [python]}\n")
+	writeScannerFixture(t, path, "name: project\nenvironments: [dev]\nuse: {languages: [python]}\n")
 	cfg, err := Load(path)
 	if err != nil {
 		t.Fatal(err)
@@ -53,7 +54,7 @@ func TestLoaderPythonCorrectionPreservesLocalOverride(t *testing.T) {
 	if cfg.Languages["python"].Steps[1].Run != "python -m compileall ." {
 		t.Fatal("default import did not use maintained correction")
 	}
-	writeScannerFixture(t, path, "name: project\nuse: {languages: [python]}\nlanguages:\n  python:\n    steps: [{name: Custom, run: 'custom-command || true'}]\n")
+	writeScannerFixture(t, path, "name: project\nenvironments: [dev]\nuse: {languages: [python]}\nlanguages:\n  python:\n    steps: [{name: Custom, run: 'custom-command || true'}]\n")
 	cfg, err = Load(path)
 	if err != nil {
 		t.Fatal(err)
@@ -67,7 +68,7 @@ func TestLoaderPythonCorrectionPreservesLocalOverride(t *testing.T) {
 func TestLoaderJavaCorrectionPreservesLocalOverride(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	path := filepath.Join(t.TempDir(), "bear.config.yml")
-	writeScannerFixture(t, path, "name: project\nuse: {languages: [java]}\n")
+	writeScannerFixture(t, path, "name: project\nenvironments: [dev]\nuse: {languages: [java]}\n")
 	cfg, err := Load(path)
 	if err != nil {
 		t.Fatal(err)
@@ -75,7 +76,7 @@ func TestLoaderJavaCorrectionPreservesLocalOverride(t *testing.T) {
 	if !strings.Contains(cfg.Languages["java"].Steps[0].Run, "if [ -f pom.xml ]") {
 		t.Fatal("default import did not use maintained correction")
 	}
-	writeScannerFixture(t, path, "name: project\nuse: {languages: [java]}\nlanguages:\n  java:\n    steps: [{name: Custom, run: 'custom-command || true'}]\n")
+	writeScannerFixture(t, path, "name: project\nenvironments: [dev]\nuse: {languages: [java]}\nlanguages:\n  java:\n    steps: [{name: Custom, run: 'custom-command || true'}]\n")
 	cfg, err = Load(path)
 	if err != nil {
 		t.Fatal(err)

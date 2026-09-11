@@ -48,11 +48,15 @@ type UseConfig struct {
 
 // Config is the main configuration (bear.config.yml)
 type Config struct {
-	Name       string              `yaml:"name"`
-	IgnoreDirs []string            `yaml:"ignore_dirs,omitempty"`
-	Use        UseConfig           `yaml:"use,omitempty"` // Import predefined presets
-	Languages  map[string]Language `yaml:"languages"`
-	Targets    map[string]Target   `yaml:"targets,omitempty"`
+	Name string `yaml:"name"`
+	// Environments declares every deployment environment of this project. It is
+	// required: an artifact allowlist, a plan argument and a lock-file key are
+	// all checked against it.
+	Environments []string            `yaml:"environments"`
+	IgnoreDirs   []string            `yaml:"ignore_dirs,omitempty"`
+	Use          UseConfig           `yaml:"use,omitempty"` // Import predefined presets
+	Languages    map[string]Language `yaml:"languages"`
+	Targets      map[string]Target   `yaml:"targets,omitempty"`
 }
 
 // Load loads a bear.config.yml file
@@ -68,6 +72,12 @@ func Load(path string) (*Config, error) {
 	}
 	if strings.TrimSpace(cfg.Name) == "" {
 		return nil, fmt.Errorf("%s: project name must not be blank", path)
+	}
+	if len(cfg.Environments) == 0 {
+		return nil, fmt.Errorf("%s: environments must list at least one deployment environment, for example [dev, int, prd]", path)
+	}
+	if err := ValidateEnvironmentNames(cfg.Environments); err != nil {
+		return nil, fmt.Errorf("%s: environments: %w", path, err)
 	}
 	if err := ValidateRevision(cfg.Use.Revision); err != nil {
 		return nil, fmt.Errorf("%s: use.revision: %w", path, err)

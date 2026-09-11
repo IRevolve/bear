@@ -22,29 +22,56 @@ func TestPlanCommand(t *testing.T) {
 		preservePlan   bool
 		missingConfig  bool
 		validationOnly bool
-		environment    string
-		artifacts      []string
-		pin            string
+		// declared is the environments list of bear.config.yml; allowlist is the
+		// environments list of every artifact. Both default to dev, int and prd.
+		declared    []string
+		allowlist   []string
+		environment string
+		artifacts   []string
+		pin         string
 	}{
 		{name: "no arguments", wantError: "requires at least 1 arg(s)", preservePlan: true},
-		{name: "flags only", args: []string{"--concurrency", "1"}, wantError: "requires at least 1 arg(s)", preservePlan: true},
-		{name: "invalid environment", args: []string{"production"}, wantError: `error creating plan: invalid environment "production"`},
-		{name: "empty environment", args: []string{""}, wantError: `error creating plan: invalid environment ""`},
-		{name: "artifact is not environment", args: []string{"api"}, wantError: `error creating plan: invalid environment "api"`},
+		{name: "flags only", args: []string{"--pin", "abc123"}, wantError: "requires at least 1 arg(s)", preservePlan: true},
+		{name: "undeclared environment", args: []string{"production"}, wantError: `error creating plan: unknown environment "production": bear.config.yml declares dev, int, prd`},
+		{name: "malformed environment", args: []string{"PRD"}, wantError: `error creating plan: invalid environment name "PRD"`},
+		{name: "empty environment", args: []string{""}, wantError: `error creating plan: invalid environment name ""`},
+		{name: "artifact is not environment", args: []string{"api"}, wantError: `error creating plan: unknown environment "api": bear.config.yml declares dev, int, prd`},
 		{name: "dev", args: []string{"dev"}, environment: "dev", artifacts: []string{"api", "web", "worker"}},
 		{name: "int", args: []string{"int"}, environment: "int", artifacts: []string{"api", "web", "worker"}},
 		{name: "prd", args: []string{"prd"}, environment: "prd", artifacts: []string{"api", "web", "worker"}},
+		// A project is free to declare its own set; nothing defaults to dev/int/prd.
+		{
+			name: "custom set", args: []string{"preprd"}, environment: "preprd",
+			declared: []string{"preprd", "prd"}, allowlist: []string{"preprd", "prd"},
+			artifacts: []string{"api", "web", "worker"},
+		},
+		{
+			name: "old default is undeclared in a custom set", args: []string{"int"},
+			declared: []string{"preprd", "prd"}, allowlist: []string{"preprd", "prd"},
+			wantError: `error creating plan: unknown environment "int": bear.config.yml declares preprd, prd`,
+		},
+		{
+			name: "artifact allowlist names an undeclared environment", args: []string{"dev"},
+			allowlist: []string{"dev", "preprd"},
+			wantError: `error creating plan: artifact "api" allows undeclared environment "preprd"; bear.config.yml declares dev, int, prd`,
+		},
 		{name: "single artifact", args: []string{"dev", "web"}, environment: "dev", artifacts: []string{"web"}},
 		{name: "multiple artifacts", args: []string{"int", "worker", "api"}, environment: "int", artifacts: []string{"api", "worker"}},
-		{name: "interspersed flags", args: []string{"--concurrency", "1", "prd", "worker", "--pin", "HEAD~1", "api", "--force"}, environment: "prd", artifacts: []string{"api", "worker"}, pin: "HEAD~1"},
+		{name: "interspersed flags", args: []string{"prd", "worker", "--pin", "HEAD~1", "api", "--force"}, environment: "prd", artifacts: []string{"api", "worker"}, pin: "HEAD~1"},
 		{name: "removed flag", args: []string{"--environment", "dev"}, wantError: "unknown flag: --environment", preservePlan: true},
 		{name: "removed flag after environment", args: []string{"dev", "--environment", "int"}, wantError: "unknown flag: --environment", preservePlan: true},
 		{name: "missing config", args: []string{"dev"}, wantError: "error loading config", missingConfig: true},
 		{name: "validation only", args: []string{"int"}, environment: "int", validationOnly: true},
 		{name: "validation only missing environment", wantError: "requires at least 1 arg(s)", preservePlan: true, validationOnly: true},
-		{name: "validation only empty environment", args: []string{""}, wantError: `error creating plan: invalid environment ""`, validationOnly: true},
+		{name: "validation only empty environment", args: []string{""}, wantError: `error creating plan: invalid environment name ""`, validationOnly: true},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
+			if tt.declared == nil {
+				tt.declared = []string{"dev", "int", "prd"}
+			}
+			if tt.allowlist == nil {
+				tt.allowlist = []string{"dev", "int", "prd"}
+			}
 			for _, flags := range []*pflag.FlagSet{rootCmd.PersistentFlags(), planCmd.Flags()} {
 				flags.VisitAll(func(flag *pflag.Flag) {
 					value, changed := flag.Value.String(), flag.Changed
@@ -69,7 +96,8 @@ func TestPlanCommand(t *testing.T) {
 			t.Setenv("BEAR_ENVIRONMENT", "dev")
 			root := t.TempDir()
 			if !tt.missingConfig {
-				if err := os.WriteFile(filepath.Join(root, "bear.config.yml"), []byte("name: test\nlanguages:\n  test:\n    detection:\n      files: [bear.artifact.yml]\n    steps: []\ntargets:\n  local:\n    steps:\n      - name: deploy\n        run: 'true'\n"), 0644); err != nil {
+				content := fmt.Sprintf("name: test\nenvironments: [%s]\nlanguages:\n  test:\n    detection:\n      files: [bear.artifact.yml]\n    steps: []\ntargets:\n  local:\n    steps:\n      - name: deploy\n        run: 'true'\n", strings.Join(tt.declared, ", "))
+				if err := os.WriteFile(filepath.Join(root, "bear.config.yml"), []byte(content), 0644); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -80,7 +108,7 @@ func TestPlanCommand(t *testing.T) {
 				}
 				content := fmt.Sprintf("name: %s\ntarget: local\n", name)
 				if !tt.validationOnly {
-					content += "environments: [dev, int, prd]\n"
+					content += fmt.Sprintf("environments: [%s]\n", strings.Join(tt.allowlist, ", "))
 				}
 				if err := os.WriteFile(filepath.Join(dir, "bear.artifact.yml"), []byte(content), 0644); err != nil {
 					t.Fatal(err)
@@ -147,7 +175,7 @@ func TestPlanCommand(t *testing.T) {
 				if artifact.Vars["ENVIRONMENT"] != tt.environment || artifact.PinCommit != wantPin || artifact.Pinned != (tt.pin != "") {
 					t.Errorf("options not passed to artifact: %+v", artifact)
 				}
-				if artifact.Path != artifact.Name || !slices.Equal(artifact.Environments, []string{"dev", "int", "prd"}) {
+				if artifact.Path != artifact.Name || !slices.Equal(artifact.Environments, tt.allowlist) {
 					t.Errorf("invalid artifact snapshot: %+v", artifact)
 				}
 			}
@@ -155,12 +183,17 @@ func TestPlanCommand(t *testing.T) {
 				t.Fatalf("missing source evidence: %+v", plan)
 			}
 			slices.Sort(names)
-			wantValidations := len(tt.artifacts)
+			wantChanged := len(tt.artifacts)
 			if tt.validationOnly {
-				wantValidations = 3
+				wantChanged = 3
 			}
-			if plan.Environment != tt.environment || plan.ToDeploy != len(tt.artifacts) || plan.Validated != wantValidations || len(plan.Validations) != wantValidations || !slices.Equal(names, tt.artifacts) {
+			if plan.Environment != tt.environment || plan.ToDeploy != len(tt.artifacts) || plan.Changed != wantChanged || !slices.Equal(names, tt.artifacts) {
 				t.Fatalf("arguments not passed to planner: %+v, artifacts: %v", plan, names)
+			}
+			for _, artifact := range plan.Artifacts {
+				if len(artifact.Steps) == 0 {
+					t.Errorf("deploy steps missing: %+v", artifact)
+				}
 			}
 		})
 	}

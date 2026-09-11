@@ -48,33 +48,37 @@ type PlanOptions struct {
 	Force       bool     // Ignore pinned artifacts
 }
 
-// getValidationSteps returns all validation steps for a given language
-func getValidationSteps(cfg *config.Config, language string) []config.Step {
+// ValidationSteps returns all validation steps for a given language. An
+// artifact whose language is unconfigured or defines no steps is not validated.
+func ValidationSteps(cfg *config.Config, language string) []config.Step {
 	if lang, ok := cfg.Languages[language]; ok {
 		return lang.Steps
 	}
 	return nil
 }
 
-// CreatePlanWithOptions creates a plan with extended options
-func CreatePlanWithOptions(rootPath string, cfg *config.Config, opts PlanOptions) (*Plan, error) {
-	if err := config.ValidateEnvironment(opts.Environment); err != nil {
-		return nil, err
-	}
-	// Load lock file
-	lockPath := filepath.Join(rootPath, "bear.lock.yml")
-	lockFile, err := config.LoadLock(lockPath)
-	if err != nil {
-		return nil, err
-	}
+// Graph is the discovered and validated artifact graph of a project.
+type Graph struct {
+	// Artifacts holds every discovered artifact and library, in scan order.
+	Artifacts []DiscoveredArtifact
+	// Paths maps an artifact name to its slash-separated path relative to the
+	// project root.
+	Paths map[string]string
+	// Closures maps an artifact name to itself plus every transitive dependency.
+	Closures map[string][]string
+}
 
-	// Scan all artifacts
+// LoadGraph scans the project and validates the whole graph before any caller
+// selects a subset of it: names are unique, non-libraries reference a
+// configured target, every deployment allowlist names declared environments,
+// dependencies resolve, and there are no cycles. Planning and validation share
+// this so a name that fails one never passes the other.
+func LoadGraph(rootPath string, cfg *config.Config) (*Graph, error) {
 	artifacts, err := ScanArtifacts(rootPath, cfg)
 	if err != nil {
 		return nil, err
 	}
 
-	// Build and validate the full graph before selecting output artifacts.
 	byName := make(map[string]DiscoveredArtifact, len(artifacts))
 	paths := make(map[string]string, len(artifacts))
 	for _, artifact := range artifacts {
@@ -87,6 +91,10 @@ func CreatePlanWithOptions(rootPath string, cfg *config.Config, opts PlanOptions
 			if _, exists := cfg.Targets[target]; !exists {
 				return nil, fmt.Errorf("artifact %q references unknown target %q", name, target)
 			}
+		}
+		// The parser only checked syntax; membership needs the project config.
+		if err := config.ValidateArtifactEnvironments(cfg, name, artifact.Artifact.Environments); err != nil {
+			return nil, err
 		}
 		if _, exists := byName[name]; exists {
 			return nil, fmt.Errorf("duplicate artifact %q", name)
@@ -136,7 +144,32 @@ func CreatePlanWithOptions(rootPath string, cfg *config.Config, opts PlanOptions
 			return nil, err
 		}
 	}
-	artifacts = filterArtifacts(artifacts, opts.Artifacts)
+
+	return &Graph{Artifacts: artifacts, Paths: paths, Closures: closures}, nil
+}
+
+// CreatePlanWithOptions creates a plan with extended options
+func CreatePlanWithOptions(rootPath string, cfg *config.Config, opts PlanOptions) (*Plan, error) {
+	if err := config.ValidateEnvironmentIn(cfg, opts.Environment); err != nil {
+		return nil, err
+	}
+	// Load lock file
+	lockPath := filepath.Join(rootPath, "bear.lock.yml")
+	lockFile, err := config.LoadLock(lockPath)
+	if err != nil {
+		return nil, err
+	}
+
+	// Scan and validate the full graph before selecting output artifacts.
+	graph, err := LoadGraph(rootPath, cfg)
+	if err != nil {
+		return nil, err
+	}
+	paths, closures := graph.Paths, graph.Closures
+	artifacts := filterArtifacts(graph.Artifacts, opts.Artifacts)
+	if err := requireKnownArtifacts(opts.Artifacts, artifacts); err != nil {
+		return nil, err
+	}
 
 	currentCommit, err := ResolveCommit(rootPath, "HEAD")
 	if err != nil {
@@ -232,7 +265,7 @@ func CreatePlanWithOptions(rootPath string, cfg *config.Config, opts PlanOptions
 
 		if affected {
 			// Find the validation steps for the language
-			validationSteps := getValidationSteps(cfg, artifact.Language)
+			validationSteps := ValidationSteps(cfg, artifact.Language)
 
 			// Find deploy steps from target (only for non-libraries)
 			var deploySteps []config.Step
@@ -335,6 +368,34 @@ func filterArtifacts(artifacts []DiscoveredArtifact, names []string) []Discovere
 	return filtered
 }
 
+// requireKnownArtifacts rejects a positional filter that matched nothing. A
+// typo must fail loudly rather than quietly plan zero artifacts, matching
+// validate's selectArtifacts convention: sorted, comma-joined, quoted names.
+func requireKnownArtifacts(names []string, filtered []DiscoveredArtifact) error {
+	if len(names) == 0 {
+		return nil
+	}
+	found := make(map[string]bool, len(filtered))
+	for _, a := range filtered {
+		found[a.Artifact.Name] = true
+	}
+	unknown := make(map[string]bool)
+	for _, name := range names {
+		if !found[name] {
+			unknown[name] = true
+		}
+	}
+	if len(unknown) == 0 {
+		return nil
+	}
+	missing := make([]string, 0, len(unknown))
+	for name := range unknown {
+		missing = append(missing, fmt.Sprintf("%q", name))
+	}
+	slices.Sort(missing)
+	return fmt.Errorf("unknown artifact %s", strings.Join(missing, ", "))
+}
+
 // createPinPlan creates a plan for pinning artifacts to a specific commit
 func createPinPlan(artifacts []DiscoveredArtifact, cfg *config.Config, lockFile *config.LockFile, lockPath string, pinCommit string) *Plan {
 	plan := &Plan{
@@ -349,7 +410,7 @@ func createPinPlan(artifacts []DiscoveredArtifact, cfg *config.Config, lockFile 
 
 	for _, artifact := range artifacts {
 		// Find the validation steps for the language
-		validationSteps := getValidationSteps(cfg, artifact.Language)
+		validationSteps := ValidationSteps(cfg, artifact.Language)
 
 		// Validation action
 		plan.Actions = append(plan.Actions, PlannedAction{

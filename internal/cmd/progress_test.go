@@ -111,7 +111,7 @@ func TestProgressOperationVerbs(t *testing.T) {
 	for _, test := range []struct{ kind, active, still, done, failed string }{
 		{"deploy", "Deploying", "Still deploying", "Deployment complete", "Deployment failed"},
 		{"validate", "Validating", "Still validating", "Validation complete", "Validation failed"},
-		{"check", "Checking", "Still checking", "Check complete", "Check failed"},
+		{"doctor", "Checking", "Still checking", "Check complete", "Check failed"},
 		{"unknown", "Running", "Still running", "Complete", "Failed"},
 	} {
 		t.Run(test.kind, func(t *testing.T) {

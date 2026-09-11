@@ -1,11 +1,9 @@
 package cmd
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"slices"
@@ -80,15 +78,15 @@ func PlanWithOptions(configPath string, opts Options) (retErr error) {
 			}
 		}()
 	}
-	currentCommit, _, dirty, err := sourceState(ctx, sourceRoot)
+	currentCommit, fingerprint, dirty, err := sourceState(ctx, sourceRoot)
 	if err != nil {
 		return fmt.Errorf("check plan source: %w", err)
 	}
 	if pinnedCommit != "" && currentCommit != pinnedCommit {
-		return fmt.Errorf("pinned source HEAD changed before validation")
+		return fmt.Errorf("pinned source HEAD changed before planning")
 	}
 	if dirty && (opts.PinCommit != "" || plan.ToDeploy > 0) {
-		return fmt.Errorf("plan requires clean source before validation; commit or remove source changes first")
+		return fmt.Errorf("plan requires clean source before planning a deployment; commit or remove source changes first")
 	}
 
 	for i := range plan.Actions {
@@ -131,13 +129,12 @@ func PlanWithOptions(configPath string, opts Options) (retErr error) {
 		}
 	}
 
+	// A positional filter that matched nothing is rejected by CreatePlanWithOptions
+	// before any output, so every artifact reaching this point is either
+	// validated/deployed or accounted for below as a skip.
 	if len(validates) == 0 && len(deploys) == 0 {
 		p.Blank()
-		if len(opts.Artifacts) > 0 && len(skips) == 0 {
-			p.Printf("No artifacts found matching: %v\n", opts.Artifacts)
-		} else {
-			p.Println("No changes detected. Nothing to plan.")
-		}
+		p.Println("No changes detected. Nothing to plan.")
 		skip := make([]summaryEntry, 0, len(skips))
 		for _, s := range skips {
 			skip = append(skip, skipEntry(planSkip(s)))
@@ -147,112 +144,20 @@ func PlanWithOptions(configPath string, opts Options) (retErr error) {
 		return nil
 	}
 
-	repo, _, err := sourceRepository(ctx, sourceRoot)
-	if err != nil {
-		return err
-	}
-	trackedDiff := func() ([]byte, error) {
-		return sourceGit(ctx, repo, "-c", "core.fileMode=true", "diff", "--no-ext-diff", "--no-textconv", "--binary", "HEAD", "--", ".", ":(exclude,glob)**/.bear/**", ":(exclude,glob)**/bear.lock.yml")
-	}
-	beforeDiff, err := trackedDiff()
-	if err != nil {
-		return fmt.Errorf("check tracked source before validation: %w", err)
-	}
 	planFile := config.NewPlanFile(currentCommit)
 	planFile.Environment = plan.Environment
 	planFile.Pinned = opts.PinCommit != ""
-	planFile.Validated = len(validates)
-	for _, v := range validates {
-		planFile.Validations = append(planFile.Validations, config.PlanValidation{
-			Name:  v.Artifact.Artifact.Name,
-			Path:  v.Artifact.Path,
-			Vars:  mergeVars(cfg, v.Artifact.Artifact.Target, v.Artifact.Language, v.Artifact.Artifact.Vars, plan.Environment),
-			Steps: v.Steps,
-		})
-	}
-
-	// Phase 1: Validate all changed artifacts in parallel
-	if len(validates) > 0 {
-		p.PhaseHeader("Validating " + plural(len(validates), "artifact", "artifacts"))
-
-		// Build task names for progress tracker
-		valTaskNames := make([]string, len(validates))
-		for i, v := range validates {
-			valTaskNames[i] = v.Artifact.Artifact.Name
-		}
-
-		pt := NewProgressTracker(p, valTaskNames)
-		pt.SetOperation("validate")
-		if opts.Verbose {
-			pt.UsePlainOutput()
-		}
-		pt.Start()
-
-		errs := RunParallel(ctx, opts.Concurrency, len(validates), func(ctx context.Context, i int) error {
-			v := planFile.Validations[i]
-			pt.MarkRunning(i)
-			var combinedOutput TailBuffer
-
-			for stepIndex, step := range v.Steps {
-				pt.MarkStep(i, step.Name, stepIndex+1, len(v.Steps))
-				var output io.Writer = &combinedOutput
-				if opts.Verbose {
-					output = io.MultiWriter(&combinedOutput, pt.StepWriter(i, step.Name))
-				}
-				path, execErr := safeArtifactPath(sourceRoot, v.Path)
-				if execErr == nil {
-					execErr = ExecuteStep(ctx, step.Run, path, v.Vars, output, output)
-				}
-				if execErr != nil {
-					execErr = fmt.Errorf("%s: %w", step.Name, execErr)
-					pt.MarkFailed(i, execErr, combinedOutput.String())
-					return execErr
-				}
-			}
-
-			pt.MarkDone(i)
-			return nil
-		})
-
-		// Check for failures
-		var failures []string
-		for i, err := range errs {
-			if err != nil {
-				pt.MarkFailed(i, err, "")
-				failures = append(failures, valTaskNames[i])
-			}
-		}
-		pt.Stop()
-
-		if len(CollectErrors(errs)) > 0 {
-			p.Blank()
-			p.Printf("  %s\n", p.red(fmt.Sprintf("Validation failed for: %s", strings.Join(failures, ", "))))
-			p.Hint(fmt.Sprintf("Fix the errors above and run 'bear plan %s' again.", plan.Environment))
-			return fmt.Errorf("validation failed: %w", errors.Join(CollectErrors(errs)...))
-		}
-
-		printResult(p, p.green, "Validation complete", []string{plural(len(validates), "artifact", "artifacts")}, pt.TotalElapsed())
-	}
-
-	// Generated untracked output is allowed and included in the saved fingerprint.
-	// Tracked source and HEAD must remain unchanged, including for validation-only plans.
-	afterCommit, fingerprint, _, err := sourceState(ctx, sourceRoot)
-	if err != nil {
-		return fmt.Errorf("check source after validation: %w", err)
-	}
-	if afterCommit != currentCommit {
-		return fmt.Errorf("HEAD changed during validation")
-	}
-	afterDiff, err := trackedDiff()
-	if err != nil {
-		return fmt.Errorf("check tracked source after validation: %w", err)
-	}
-	if !bytes.Equal(beforeDiff, afterDiff) {
-		return fmt.Errorf("tracked source changed during validation")
-	}
+	planFile.Changed = len(validates)
 	planFile.SourceFingerprint = fingerprint
 
-	// Phase 2: Write plan file
+	// deploying is the set of artifact names that will be deployed, used below
+	// to find changed artifacts (validates) that are not also deploying, such
+	// as libraries or targets with no deploy steps.
+	deploying := make(map[string]bool, len(deploys))
+	for _, d := range deploys {
+		deploying[d.Artifact.Artifact.Name] = true
+	}
+
 	for _, d := range deploys {
 		vars := mergeVars(cfg, d.Artifact.Artifact.Target, d.Artifact.Language, d.Artifact.Artifact.Vars, plan.Environment)
 		vars["NAME"] = d.Artifact.Artifact.Name
@@ -268,6 +173,7 @@ func PlanWithOptions(configPath string, opts Options) (retErr error) {
 			Reason:       d.Reason,
 			ChangedFiles: d.ChangedFiles,
 			Vars:         vars,
+			BuildSteps:   internal.ValidationSteps(cfg, d.Artifact.Language),
 			Steps:        d.Steps,
 			IsLib:        d.Artifact.Artifact.IsLib,
 		}
@@ -290,13 +196,27 @@ func PlanWithOptions(configPath string, opts Options) (retErr error) {
 		return fmt.Errorf("error writing plan file: %w", err)
 	}
 
-	// Phase 3: Show the validated plan
-	printValidatedPlan(p, plan, planFile, opts)
+	// changed collects, for review only, artifacts that changed (were subject
+	// to validation) but have nothing to deploy: libraries and targets with no
+	// deploy steps. Nothing here executes, and nothing here is persisted.
+	var changed []summaryEntry
+	for _, v := range validates {
+		if deploying[v.Artifact.Artifact.Name] {
+			continue
+		}
+		changed = append(changed, summaryEntry{
+			Name:   v.Artifact.Artifact.Name,
+			Path:   v.Artifact.Path,
+			Reason: v.Reason,
+		})
+	}
+
+	printPlanSummary(p, plan, planFile, opts, changed)
 
 	return nil
 }
 
-func printValidatedPlan(p *Printer, plan *internal.Plan, planFile *config.PlanFile, opts Options) {
+func printPlanSummary(p *Printer, plan *internal.Plan, planFile *config.PlanFile, opts Options, changed []summaryEntry) {
 	header := summaryHeader{Environment: planFile.Environment}
 	// The source is identical for every deployment, so report it once here
 	// instead of repeating it under each artifact.
@@ -319,12 +239,13 @@ func printValidatedPlan(p *Printer, plan *internal.Plan, planFile *config.PlanFi
 	p.Blank()
 	printEnvironmentSummary(p, header,
 		summarySection{Label: "deploy", Color: p.cyan, Entries: deploy},
+		summarySection{Label: "changed", Color: p.dim, Entries: changed},
 		summarySection{Label: "skip", Color: p.dim, Entries: planSkipEntries(planFile.Skipped)},
 	)
 
 	// The closing sentence mirrors apply, so both commands end the same way.
 	counts := []string{
-		plural(planFile.Validated, "validated", "validated"),
+		plural(planFile.Changed, "changed", "changed"),
 		plural(planFile.ToDeploy, "to deploy", "to deploy"),
 	}
 	if planFile.TotalSkips > 0 {

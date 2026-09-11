@@ -36,21 +36,11 @@ func LoadArtifact(path string) (*Artifact, error) {
 			return nil, fmt.Errorf("%s: dependency name must not be blank", path)
 		}
 	}
-	for _, environment := range artifact.Environments {
-		if err := ValidateEnvironment(environment); err != nil {
-			return nil, fmt.Errorf("%s: environments: %w", path, err)
-		}
+	// A parser cannot know which environments the project declares, so it only
+	// enforces syntax and uniqueness here. internal.LoadGraph checks membership.
+	if err := ValidateEnvironmentNames(artifact.Environments); err != nil {
+		return nil, fmt.Errorf("%s: environments: %w", path, err)
 	}
 
 	return &artifact, nil
-}
-
-// ValidateEnvironment checks an explicit deployment environment.
-func ValidateEnvironment(environment string) error {
-	switch environment {
-	case "dev", "int", "prd":
-		return nil
-	default:
-		return fmt.Errorf("invalid environment %q: expected dev, int, or prd", environment)
-	}
 }

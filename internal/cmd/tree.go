@@ -24,10 +24,11 @@ func Tree(configPath string, filterArtifacts []string) error {
 		rootPath, _ = os.Getwd()
 	}
 
-	artifacts, err := internal.ScanArtifacts(rootPath, cfg)
+	graph, err := internal.LoadGraph(rootPath, cfg)
 	if err != nil {
-		return fmt.Errorf("error scanning artifacts: %w", err)
+		return fmt.Errorf("error loading artifacts: %w", err)
 	}
+	artifacts := graph.Artifacts
 
 	// Load lock file for status info
 	lockPath := filepath.Join(rootPath, "bear.lock.yml")
@@ -36,16 +37,11 @@ func Tree(configPath string, filterArtifacts []string) error {
 		return fmt.Errorf("error loading lock: %w", err)
 	}
 
-	// Build artifact map
-	artifactMap := make(map[string]internal.DiscoveredArtifact)
+	// Build artifact map. LoadGraph already rejected duplicate names, so this
+	// lookup can never collide.
+	artifactMap := make(map[string]internal.DiscoveredArtifact, len(artifacts))
 	for _, a := range artifacts {
-		if _, exists := artifactMap[a.Artifact.Name]; exists {
-			return fmt.Errorf("duplicate artifact name %q", a.Artifact.Name)
-		}
 		artifactMap[a.Artifact.Name] = a
-	}
-	if cycles := findCycles(artifacts); len(cycles) > 0 {
-		return fmt.Errorf("circular dependency: %s", strings.Join(cycles[0], " -> "))
 	}
 	for _, name := range filterArtifacts {
 		if _, ok := artifactMap[name]; !ok {
@@ -71,14 +67,14 @@ func Tree(configPath string, filterArtifacts []string) error {
 				if i > 0 {
 					p.Blank()
 				}
-				printArtifactTree(p, a, artifactMap, dependents, lockFile, "", true)
+				printArtifactTree(p, cfg.Environments, a, artifactMap, dependents, lockFile, "", true)
 			} else {
 				p.Warning(fmt.Sprintf("Unknown artifact: %s", name))
 			}
 		}
 	} else {
 		// Full tree: Show from libraries to services
-		printFullDependencyTree(p, artifacts, artifactMap, dependents, lockFile)
+		printFullDependencyTree(p, cfg.Environments, artifacts, artifactMap, dependents, lockFile)
 	}
 
 	// Statistics
@@ -97,7 +93,7 @@ func Tree(configPath string, filterArtifacts []string) error {
 }
 
 // printFullDependencyTree displays the complete dependency tree
-func printFullDependencyTree(p *Printer, artifacts []internal.DiscoveredArtifact, artifactMap map[string]internal.DiscoveredArtifact, dependents map[string][]string, lockFile *config.LockFile) {
+func printFullDependencyTree(p *Printer, environments []string, artifacts []internal.DiscoveredArtifact, artifactMap map[string]internal.DiscoveredArtifact, dependents map[string][]string, lockFile *config.LockFile) {
 	// Group: libraries first, then services
 	var libs, services []internal.DiscoveredArtifact
 	for _, a := range artifacts {
@@ -117,7 +113,7 @@ func printFullDependencyTree(p *Printer, artifacts []internal.DiscoveredArtifact
 		for _, a := range libs {
 			deps := dependents[a.Artifact.Name]
 			sort.Strings(deps)
-			status := getStatus(p, a, lockFile)
+			status := getStatus(p, environments, a, lockFile)
 			p.Printf("   %s%s\n", p.bold(a.Artifact.Name), status)
 			if len(deps) > 0 {
 				p.Printf("      └─ used by: %s\n", p.dim(strings.Join(deps, ", ")))
@@ -130,7 +126,7 @@ func printFullDependencyTree(p *Printer, artifacts []internal.DiscoveredArtifact
 	if len(services) > 0 {
 		p.Printf("  %s\n", p.dim("Services"))
 		for _, a := range services {
-			status := getStatus(p, a, lockFile)
+			status := getStatus(p, environments, a, lockFile)
 			target := ""
 			if a.Artifact.Target != "" {
 				target = p.dim(fmt.Sprintf(" → %s", a.Artifact.Target))
@@ -157,12 +153,14 @@ func printFullDependencyTree(p *Printer, artifacts []internal.DiscoveredArtifact
 	}
 }
 
-func getStatus(p *Printer, a internal.DiscoveredArtifact, lockFile *config.LockFile) string {
+func getStatus(p *Printer, environments []string, a internal.DiscoveredArtifact, lockFile *config.LockFile) string {
 	if lockFile == nil {
 		return ""
 	}
 	var statuses []string
-	for _, environment := range []string{"dev", "int", "prd"} {
+	// Only the configured environments are shown. History for an environment
+	// that is no longer declared stays in the lock file as historical data.
+	for _, environment := range environments {
 		if entry, ok := lockFile.Environments[environment][a.Artifact.Name]; ok {
 			version := entry.Version
 			if version == "" {
@@ -182,8 +180,8 @@ func getStatus(p *Printer, a internal.DiscoveredArtifact, lockFile *config.LockF
 }
 
 // printArtifactTree prints the tree for a specific artifact (dependencies)
-func printArtifactTree(p *Printer, a internal.DiscoveredArtifact, artifactMap map[string]internal.DiscoveredArtifact, dependents map[string][]string, lockFile *config.LockFile, prefix string, isRoot bool) {
-	status := getStatus(p, a, lockFile)
+func printArtifactTree(p *Printer, environments []string, a internal.DiscoveredArtifact, artifactMap map[string]internal.DiscoveredArtifact, dependents map[string][]string, lockFile *config.LockFile, prefix string, isRoot bool) {
+	status := getStatus(p, environments, a, lockFile)
 	extra := ""
 
 	if !a.Artifact.IsLib && a.Artifact.Target != "" {
@@ -211,7 +209,7 @@ func printArtifactTree(p *Printer, a internal.DiscoveredArtifact, artifactMap ma
 
 			if dep, ok := artifactMap[depName]; ok {
 				p.Printf("%s%s", prefix, connector)
-				printArtifactTree(p, dep, artifactMap, dependents, lockFile, childPrefix, false)
+				printArtifactTree(p, environments, dep, artifactMap, dependents, lockFile, childPrefix, false)
 			} else {
 				p.Printf("%s%s%s (not found)\n", prefix, connector, p.red(depName))
 			}

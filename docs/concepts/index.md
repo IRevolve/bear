@@ -4,4 +4,5 @@
 - [Dependencies](dependencies.md) — Transitive dependency resolution
 - [Lock File](lock-file.md) — Tracking deployed versions
 - [Pinning & Rollback](pinning.md) — Pin artifacts to specific commits
+- [Freeze & Unfreeze (Jenkins)](freeze-unfreeze.md) — A parameterized pipeline pattern built on `--pin`/`--force`
 - [Plan/Apply Workflow](plan-apply.md) — The Terraform-inspired workflow

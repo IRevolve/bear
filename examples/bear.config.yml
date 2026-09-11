@@ -1,5 +1,11 @@
 name: acme-platform
 
+# Every deployment environment of this project. Required: an artifact allowlist,
+# a 'bear plan <environment>' argument and a bear.lock.yml key are all checked
+# against this list. Declaration order is preserved in messages and listings, and
+# carries no promotion semantics.
+environments: [dev, int, prd]
+
 languages:
   go:
     detection:

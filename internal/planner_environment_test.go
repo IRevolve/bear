@@ -22,22 +22,23 @@ func TestCreatePlanEnvironmentPolicy(t *testing.T) {
 	}{
 		{name: "no policy", opts: PlanOptions{Environment: "int"}, validates: 1, skips: 1},
 		{name: "empty policy", policy: "[]", opts: PlanOptions{Environment: "int"}, validates: 1, skips: 1},
-		{name: "missing environment without policy", wantError: "invalid environment"},
-		{name: "missing environment with empty policy", policy: "[]", wantError: "invalid environment"},
+		{name: "missing environment without policy", wantError: "invalid environment name"},
+		{name: "missing environment with empty policy", policy: "[]", wantError: "invalid environment name"},
 		{name: "dev allowed", policy: "[dev]", opts: PlanOptions{Environment: "dev"}, deploys: 1, validates: 1},
 		{name: "int allowed", policy: "[int, prd]", opts: PlanOptions{Environment: "int"}, deploys: 1, validates: 1},
 		{name: "prd allowed", policy: "[int, prd]", opts: PlanOptions{Environment: "prd"}, deploys: 1, validates: 1},
 		{name: "int not enabled", policy: "[dev]", opts: PlanOptions{Environment: "int"}, validates: 1, skips: 1},
 		{name: "prd not enabled", policy: "[dev]", opts: PlanOptions{Environment: "prd"}, validates: 1, skips: 1},
-		{name: "missing environment", policy: "[int]", wantError: "invalid environment"},
-		{name: "missing environment even pinned", policy: "[int]", pinned: true, wantError: "invalid environment"},
-		{name: "invalid environment without policy", opts: PlanOptions{Environment: "production"}, wantError: "invalid environment"},
-		{name: "invalid policy", policy: "[production]", opts: PlanOptions{Environment: "int"}, wantError: "environments"},
-		{name: "unselected policy", policy: "[int]", opts: PlanOptions{Environment: "int", Artifacts: []string{"other"}}},
-		{name: "empty selection requires environment", opts: PlanOptions{Artifacts: []string{"other"}}, wantError: "invalid environment"},
+		{name: "missing environment", policy: "[int]", wantError: "invalid environment name"},
+		{name: "missing environment even pinned", policy: "[int]", pinned: true, wantError: "invalid environment name"},
+		{name: "undeclared environment without policy", opts: PlanOptions{Environment: "production"}, wantError: `unknown environment "production": bear.config.yml declares dev, int, prd`},
+		{name: "malformed environment", opts: PlanOptions{Environment: "PRD"}, wantError: `invalid environment name "PRD"`},
+		{name: "undeclared policy", policy: "[production]", opts: PlanOptions{Environment: "int"}, wantError: `artifact "api" allows undeclared environment "production"; bear.config.yml declares dev, int, prd`},
+		{name: "unselected policy", policy: "[int]", opts: PlanOptions{Environment: "int", Artifacts: []string{"other"}}, wantError: `unknown artifact "other"`},
+		{name: "empty selection requires environment", opts: PlanOptions{Artifacts: []string{"other"}}, wantError: "invalid environment name"},
 		{name: "pin disabled", policy: "[dev]", opts: PlanOptions{Environment: "int", PinCommit: "abc1234"}, validates: 1, skips: 1},
 		{name: "pin allowed", policy: "[dev]", opts: PlanOptions{Environment: "dev", PinCommit: "abc1234"}, validates: 1, deploys: 1},
-		{name: "pin requires environment", policy: "[int]", opts: PlanOptions{PinCommit: "abc1234"}, wantError: "invalid environment"},
+		{name: "pin requires environment", policy: "[int]", opts: PlanOptions{PinCommit: "abc1234"}, wantError: "invalid environment name"},
 		{name: "force disabled", policy: "[dev]", pinned: true, opts: PlanOptions{Environment: "int", Force: true}, validates: 1, skips: 1},
 		{name: "force allowed", policy: "[dev]", pinned: true, opts: PlanOptions{Environment: "dev", Force: true}, validates: 1, deploys: 1},
 		{name: "force pin disabled", policy: "[dev]", pinned: true, opts: PlanOptions{Environment: "int", Force: true, PinCommit: "abc1234"}, validates: 1, skips: 1},
@@ -62,7 +63,10 @@ func TestCreatePlanEnvironmentPolicy(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			cfg := &config.Config{Targets: map[string]config.Target{"local": {Steps: []config.Step{{Name: "deploy", Run: "true"}}}}}
+			cfg := &config.Config{
+				Environments: []string{"dev", "int", "prd"},
+				Targets:      map[string]config.Target{"local": {Steps: []config.Step{{Name: "deploy", Run: "true"}}}},
+			}
 			plan, err := CreatePlanWithOptions(root, cfg, tt.opts)
 			if tt.wantError != "" {
 				if err == nil || !strings.Contains(err.Error(), tt.wantError) {
@@ -91,6 +95,33 @@ func TestCreatePlanEnvironmentPolicy(t *testing.T) {
 	}
 }
 
+// TestCreatePlanRejectsUnknownArtifacts aligns plan's positional filter with
+// validate's: a name that matches nothing is a hard error, in every mode.
+func TestCreatePlanRejectsUnknownArtifacts(t *testing.T) {
+	root := detectorRepo(t)
+	detectorWrite(t, root, "bear.artifact.yml", "name: api\ntarget: local\nenvironments: [dev]\n")
+	commit := detectorCommit(t, root)
+
+	for _, tt := range []struct {
+		name string
+		opts PlanOptions
+		want string
+	}{
+		{name: "unmatched name alone", opts: PlanOptions{Environment: "dev", Artifacts: []string{"typo"}}, want: `unknown artifact "typo"`},
+		{name: "unmatched name mixed with a valid one", opts: PlanOptions{Environment: "dev", Artifacts: []string{"api", "typo"}}, want: `unknown artifact "typo"`},
+		{name: "unmatched name with pin", opts: PlanOptions{Environment: "dev", Artifacts: []string{"typo"}, PinCommit: commit}, want: `unknown artifact "typo"`},
+		{name: "unmatched name with force", opts: PlanOptions{Environment: "dev", Artifacts: []string{"typo"}, Force: true}, want: `unknown artifact "typo"`},
+		{name: "multiple unmatched names are sorted and deduplicated", opts: PlanOptions{Environment: "dev", Artifacts: []string{"zeta", "alpha", "zeta"}}, want: `unknown artifact "alpha", "zeta"`},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			plan, err := CreatePlanWithOptions(root, historyConfig(), tt.opts)
+			if err == nil || err.Error() != tt.want || plan != nil {
+				t.Fatalf("expected %q and no plan, got %+v, %v", tt.want, plan, err)
+			}
+		})
+	}
+}
+
 func TestEnvironmentGatePreservesTransitiveDependencies(t *testing.T) {
 	for _, policy := range []struct {
 		name         string
@@ -104,8 +135,9 @@ func TestEnvironmentGatePreservesTransitiveDependencies(t *testing.T) {
 			for _, library := range []bool{false, true} {
 				t.Run(map[bool]string{false: "disabled source", true: "library source"}[library], func(t *testing.T) {
 					cfg := &config.Config{
-						Languages: map[string]config.Language{"test": {Steps: []config.Step{{Name: "validate", Run: "true"}}}},
-						Targets:   map[string]config.Target{"local": {Steps: []config.Step{{Name: "deploy", Run: "true"}}}},
+						Environments: []string{"dev", "int", "prd"},
+						Languages:    map[string]config.Language{"test": {Steps: []config.Step{{Name: "validate", Run: "true"}}}},
+						Targets:      map[string]config.Target{"local": {Steps: []config.Step{{Name: "deploy", Run: "true"}}}},
 					}
 					root := detectorRepo(t)
 					policyYAML := ""

@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -16,6 +15,7 @@ import (
 
 func planSourceConfig(step string) string {
 	return fmt.Sprintf(`name: source-plan
+environments: [dev, int, prd]
 languages:
   test:
     detection:
@@ -68,19 +68,25 @@ func TestPlanSourceNormalSnapshot(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// Plan is a pure decision: it never runs the language's step, so the
+	// source is untouched and its fingerprint is exactly what it was before
+	// planning (Bear's own excluded state aside).
 	head, fingerprint, dirty := sourceTestState(t, root)
-	if plan.Commit != commit || head != commit || plan.SourceFingerprint != fingerprint || before == fingerprint || !dirty || plan.Pinned {
+	if plan.Commit != commit || head != commit || plan.SourceFingerprint != fingerprint || before != fingerprint || dirty || plan.Pinned {
 		t.Fatalf("incorrect source snapshot: %+v; HEAD=%s fingerprint=%s dirty=%v", plan, head, fingerprint, dirty)
 	}
-	if len(plan.Artifacts) != 1 || len(plan.Validations) != 1 || plan.Validated != 1 || plan.ToDeploy != 1 {
+	if _, err := os.Stat(filepath.Join(root, "app", "generated")); !os.IsNotExist(err) {
+		t.Fatalf("plan executed the language step: %v", err)
+	}
+	if len(plan.Artifacts) != 1 || plan.Changed != 1 || plan.ToDeploy != 1 {
 		t.Fatalf("incorrect actions: %+v", plan)
 	}
-	artifact, validation := plan.Artifacts[0], plan.Validations[0]
-	if artifact.Path != "app" || validation.Path != "app" || artifact.Completed || artifact.Pinned || artifact.Vars["VERSION"] != commit[:7] {
-		t.Fatalf("incorrect artifact snapshot: %+v; validation: %+v", artifact, validation)
+	artifact := plan.Artifacts[0]
+	if artifact.Path != "app" || artifact.Completed || artifact.Pinned || artifact.Vars["VERSION"] != commit[:7] {
+		t.Fatalf("incorrect artifact snapshot: %+v", artifact)
 	}
-	if validation.Name != "app" || validation.Vars["ENVIRONMENT"] != "int" || validation.Vars["CHOICE"] != "artifact" || validation.Vars["LANGUAGE_REF"] != "language-${ENVIRONMENT}" || len(validation.Steps) != 1 {
-		t.Fatalf("incorrect replay snapshot: %+v", validation)
+	if artifact.Vars["ENVIRONMENT"] != "int" || artifact.Vars["CHOICE"] != "artifact" || artifact.Vars["LANGUAGE_REF"] != "language-${ENVIRONMENT}" || len(artifact.BuildSteps) != 1 || len(artifact.Steps) != 1 {
+		t.Fatalf("incorrect build step snapshot: %+v", artifact)
 	}
 	data, err := os.ReadFile(config.PlanFilePath(root))
 	if err != nil || strings.Contains(string(data), repo) || strings.Contains(string(data), "bear-source-") {
@@ -90,8 +96,9 @@ func TestPlanSourceNormalSnapshot(t *testing.T) {
 
 func TestPlanSourcePinUsesCurrentPolicyAndPinnedFiles(t *testing.T) {
 	repo, root, path, _ := planSourceFixture(t, "exit 91")
-	// A's validation is deliberately unusable, and its policy allows deployment.
-	// B supplies the actual validation and denies deployment for a second artifact.
+	// A's build step is deliberately unusable at plan time; plan never runs it.
+	// B's config is what apply will actually run, and denies deployment for a
+	// second artifact.
 	sourceTestWrite(t, root, "blocked/bear.artifact.yml", "name: blocked\ntarget: local\nenvironments: [int]\nvars:\n  CHOICE: artifact\n")
 	sourceTestWrite(t, root, "blocked/source.txt", "A\n")
 	a := sourceTestCommit(t, repo)
@@ -109,11 +116,11 @@ func TestPlanSourcePinUsesCurrentPolicyAndPinnedFiles(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if plan.Commit != a || !plan.Pinned || plan.Validated != 2 || len(plan.Validations) != 2 || len(plan.Artifacts) != 1 || len(plan.Skipped) != 1 || plan.Skipped[0].Name != "blocked" {
+	if plan.Commit != a || !plan.Pinned || plan.Changed != 2 || len(plan.Artifacts) != 1 || len(plan.Skipped) != 1 || plan.Skipped[0].Name != "blocked" {
 		t.Fatalf("incorrect pinned snapshot: %+v", plan)
 	}
 	artifact := plan.Artifacts[0]
-	if artifact.Name != "app" || artifact.Path != "app" || artifact.PinCommit != a || !artifact.Pinned || artifact.Vars["VERSION"] != a[:7] || !reflect.DeepEqual(artifact.Environments, []string{"int"}) {
+	if artifact.Name != "app" || artifact.Path != "app" || artifact.PinCommit != a || !artifact.Pinned || artifact.Vars["VERSION"] != a[:7] || !reflect.DeepEqual(artifact.Environments, []string{"int"}) || len(artifact.BuildSteps) != 1 {
 		t.Fatalf("incorrect pinned deployment: %+v", artifact)
 	}
 	if sourceTestGit(t, repo, "rev-parse", "HEAD") != b || sourceTestGit(t, repo, "status", "--porcelain", "--untracked-files=no") != beforeStatus {
@@ -121,13 +128,15 @@ func TestPlanSourcePinUsesCurrentPolicyAndPinnedFiles(t *testing.T) {
 	}
 	for _, name := range []string{"app", "blocked"} {
 		if _, err := os.Stat(filepath.Join(root, name, "generated")); !os.IsNotExist(err) {
-			t.Fatalf("validation leaked to current workspace: %s: %v", name, err)
+			t.Fatalf("plan executed a build step in the current workspace: %s: %v", name, err)
 		}
 	}
 	if count := strings.Count(sourceTestGit(t, repo, "worktree", "list", "--porcelain"), "worktree "); count != 1 {
 		t.Fatalf("plan leaked private worktree: %d worktrees", count)
 	}
-	// Replay the saved validation on a fresh checkout, exactly as apply will.
+	// Since nothing ever runs during planning, the approved fingerprint is
+	// simply the pristine pinned commit, exactly as apply will verify it
+	// before running any build or deploy step.
 	snapshot, _, cleanup, err := prepareSource(context.Background(), root, plan.Commit)
 	if err != nil {
 		t.Fatal(err)
@@ -137,37 +146,19 @@ func TestPlanSourcePinUsesCurrentPolicyAndPinnedFiles(t *testing.T) {
 			t.Error(err)
 		}
 	})
-	for _, validation := range plan.Validations {
-		if validation.Path != validation.Name || validation.Vars["ENVIRONMENT"] != "int" {
-			t.Fatalf("nonportable validation: %+v", validation)
-		}
-		dir, err := safeArtifactPath(snapshot, validation.Path)
-		if err != nil {
-			t.Fatal(err)
-		}
-		for _, step := range validation.Steps {
-			if err := ExecuteStep(context.Background(), step.Run, dir, validation.Vars, io.Discard, io.Discard); err != nil {
-				t.Fatal(err)
-			}
-		}
-	}
 	_, fingerprint, _ := sourceTestState(t, snapshot)
 	if fingerprint != plan.SourceFingerprint {
-		t.Fatalf("replay fingerprint %s differs from planned %s", fingerprint, plan.SourceFingerprint)
+		t.Fatalf("pristine pinned fingerprint %s differs from planned %s", fingerprint, plan.SourceFingerprint)
 	}
 }
 
+// Nothing runs during planning, so a step that would mutate tracked source or
+// HEAD cannot do so at plan time; only source state present before planning
+// (a dirty tree, or a missing repository) can make plan unsafe.
 func TestPlanSourceRejectsUnsafeChanges(t *testing.T) {
-	for _, scenario := range []string{"dirty", "tracked validation edit", "HEAD validation change", "no git", "no git empty selection"} {
+	for _, scenario := range []string{"dirty", "no git", "no git empty selection"} {
 		t.Run(scenario, func(t *testing.T) {
-			step := "touch generated"
-			if scenario == "tracked validation edit" {
-				step = "printf changed > source.txt"
-			}
-			if scenario == "HEAD validation change" {
-				step = "git -c user.name=Test -c user.email=test@example.invalid -c commit.gpgsign=false commit --allow-empty -m changed"
-			}
-			repo, root, path, _ := planSourceFixture(t, step)
+			repo, root, path, _ := planSourceFixture(t, "touch generated")
 			opts := Options{Environment: "int", Concurrency: 1}
 			if scenario == "dirty" {
 				sourceTestWrite(t, root, "app/source.txt", "dirty\n")
@@ -187,10 +178,8 @@ func TestPlanSourceRejectsUnsafeChanges(t *testing.T) {
 			if err == nil || config.PlanExists(root) {
 				t.Fatalf("unsafe source accepted or stale plan survived: %v", err)
 			}
-			if scenario == "dirty" || strings.HasPrefix(scenario, "no git") {
-				if _, err := os.Stat(filepath.Join(root, "app/generated")); !os.IsNotExist(err) {
-					t.Fatalf("validation ran before rejecting source: %v", err)
-				}
+			if _, err := os.Stat(filepath.Join(root, "app/generated")); !os.IsNotExist(err) {
+				t.Fatalf("plan executed a language step: %v", err)
 			}
 		})
 	}
@@ -208,8 +197,11 @@ func TestPlanSourceValidationOnlyAllowsInitialDirty(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, fingerprint, _ := sourceTestState(t, root)
-	if plan.Commit != commit || plan.SourceFingerprint != fingerprint || plan.ToDeploy != 0 || len(plan.Validations) != 1 || plan.Validations[0].Path != "app" {
+	if plan.Commit != commit || plan.SourceFingerprint != fingerprint || plan.ToDeploy != 0 || plan.Changed != 1 || len(plan.Artifacts) != 0 {
 		t.Fatalf("incorrect validation-only plan: %+v", plan)
+	}
+	if _, err := os.Stat(filepath.Join(root, "app", "generated")); !os.IsNotExist(err) {
+		t.Fatalf("plan executed the language step though nothing deploys: %v", err)
 	}
 }
 
@@ -238,18 +230,28 @@ func TestPlanSourceContextAndStepErrors(t *testing.T) {
 			t.Fatalf("cancellation not propagated: %v", err)
 		}
 	})
-	t.Run("verbose failure", func(t *testing.T) {
+	t.Run("a failing language step does not fail plan", func(t *testing.T) {
+		// Plan is a pure decision: even a step that would fail (and print) if
+		// run must never run, so it cannot fail planning. Apply is the only
+		// place this step actually executes and can fail.
 		_, root, path, _ := planSourceFixture(t, "printf stdout; printf stderr >&2; exit 7")
 		output, err := captureEnvironmentOutput(t, func() error {
 			return PlanWithOptions(path, Options{Environment: "int", Verbose: true})
 		})
-		if err == nil || !strings.Contains(err.Error(), "inspect-source") || config.PlanExists(root) {
-			t.Fatalf("missing step error: %v", err)
+		if err != nil {
+			t.Fatalf("plan: %v\n%s", err, output)
 		}
-		for _, text := range []string{"app | inspect-source |", "stdout", "stderr"} {
-			if !strings.Contains(output, text) {
-				t.Errorf("missing %q in streamed output: %s", text, output)
+		for _, text := range []string{"inspect-source", "stdout", "stderr"} {
+			if strings.Contains(output, text) {
+				t.Errorf("plan streamed step output %q: %s", text, output)
 			}
+		}
+		plan, err := config.ReadPlan(root)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(plan.Artifacts) != 1 || len(plan.Artifacts[0].BuildSteps) != 1 || plan.Artifacts[0].BuildSteps[0].Run != "printf stdout; printf stderr >&2; exit 7" {
+			t.Fatalf("failing step not saved for apply to run: %+v", plan)
 		}
 	})
 }

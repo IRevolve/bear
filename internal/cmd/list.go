@@ -25,23 +25,23 @@ func List(configPath string) error {
 		rootPath, _ = os.Getwd()
 	}
 
-	artifacts, err := internal.ScanArtifacts(rootPath, cfg)
+	graph, err := internal.LoadGraph(rootPath, cfg)
 	if err != nil {
-		return fmt.Errorf("error scanning artifacts: %w", err)
+		return fmt.Errorf("error loading artifacts: %w", err)
 	}
 	lockFile, err := config.LoadLock(filepath.Join(rootPath, "bear.lock.yml"))
 	if err != nil {
 		return fmt.Errorf("error loading lock: %w", err)
 	}
 
-	if len(artifacts) == 0 {
+	if len(graph.Artifacts) == 0 {
 		p.Println("No artifacts found.")
 		return nil
 	}
 
-	p.BearHeader(fmt.Sprintf("List (%d artifacts in %s)", len(artifacts), cfg.Name))
+	p.BearHeader(fmt.Sprintf("List (%d artifacts in %s)", len(graph.Artifacts), cfg.Name))
 
-	for _, a := range artifacts {
+	for _, a := range graph.Artifacts {
 		relPath, _ := filepath.Rel(rootPath, a.Path)
 
 		if a.Artifact.IsLib {
@@ -54,7 +54,7 @@ func List(configPath string) error {
 
 		if !a.Artifact.IsLib {
 			p.Detail("Target:  ", a.Artifact.Target)
-			if status := getStatus(p, a, lockFile); status != "" {
+			if status := getStatus(p, cfg.Environments, a, lockFile); status != "" {
 				p.Detail("Deployed:", status)
 			}
 		}

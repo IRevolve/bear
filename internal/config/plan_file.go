@@ -16,22 +16,15 @@ type PlanArtifact struct {
 	Language     string            `yaml:"language"`
 	Target       string            `yaml:"target,omitempty"`
 	Environments []string          `yaml:"environments,omitempty"` // Snapshotted deployment allowlist
-	Action       string            `yaml:"action"`                 // "deploy" or "skip"
+	Action       string            `yaml:"action"`                 // Always "deploy": skipped artifacts are recorded separately in PlanFile.Skipped, not here.
 	Reason       string            `yaml:"reason"`
 	ChangedFiles []string          `yaml:"changed_files,omitempty"`
 	Vars         map[string]string `yaml:"vars,omitempty"`
-	Steps        []Step            `yaml:"steps,omitempty"` // Deploy steps only (validation already ran)
+	BuildSteps   []Step            `yaml:"build_steps,omitempty"` // Language steps, run first by apply
+	Steps        []Step            `yaml:"steps,omitempty"`       // Target deploy steps, run after BuildSteps by apply
 	Pinned       bool              `yaml:"pinned,omitempty"`
 	PinCommit    string            `yaml:"pin_commit,omitempty"`
 	IsLib        bool              `yaml:"is_lib,omitempty"`
-}
-
-// PlanValidation records the setup and validation needed to reproduce a pinned checkout.
-type PlanValidation struct {
-	Name  string            `yaml:"name"`
-	Path  string            `yaml:"path"`
-	Vars  map[string]string `yaml:"vars,omitempty"`
-	Steps []Step            `yaml:"steps,omitempty"`
 }
 
 // PlanSkipped represents a skipped artifact
@@ -41,24 +34,33 @@ type PlanSkipped struct {
 	Reason string `yaml:"reason"`
 }
 
+// CurrentPlanFileVersion is the schema version written by this binary to
+// .bear/plan.yml. Bump it whenever PlanFile or PlanArtifact fields are
+// added, removed, or renamed in a way that changes how apply must interpret
+// a saved plan. apply rejects any plan whose Version does not match, so a
+// plan written by an older (or newer) binary is never silently
+// misinterpreted.
+const CurrentPlanFileVersion = 1
+
 // PlanFile is the serializable plan written to .bear/plan.yml
 type PlanFile struct {
-	SourceFingerprint string           `yaml:"source_fingerprint"`
-	Pinned            bool             `yaml:"pinned,omitempty"`
-	Validations       []PlanValidation `yaml:"validations,omitempty"`
-	Environment       string           `yaml:"environment,omitempty"`
-	CreatedAt         string           `yaml:"created_at"`
-	Commit            string           `yaml:"commit"`
-	Artifacts         []PlanArtifact   `yaml:"artifacts"`
-	Skipped           []PlanSkipped    `yaml:"skipped,omitempty"`
-	Validated         int              `yaml:"validated"`
-	ToDeploy          int              `yaml:"to_deploy"`
-	TotalSkips        int              `yaml:"total_skipped"`
+	Version           int            `yaml:"version"` // No omitempty: a missing/zero value must be visibly 0, not indistinguishable from a real version.
+	SourceFingerprint string         `yaml:"source_fingerprint"`
+	Pinned            bool           `yaml:"pinned,omitempty"`
+	Environment       string         `yaml:"environment,omitempty"`
+	CreatedAt         string         `yaml:"created_at"`
+	Commit            string         `yaml:"commit"`
+	Artifacts         []PlanArtifact `yaml:"artifacts"`
+	Skipped           []PlanSkipped  `yaml:"skipped,omitempty"`
+	Changed           int            `yaml:"changed"` // Artifacts affected by a source change
+	ToDeploy          int            `yaml:"to_deploy"`
+	TotalSkips        int            `yaml:"total_skipped"`
 }
 
 // NewPlanFile creates a new PlanFile with current timestamp
 func NewPlanFile(commit string) *PlanFile {
 	return &PlanFile{
+		Version:   CurrentPlanFileVersion,
 		CreatedAt: time.Now().UTC().Format(time.RFC3339),
 		Commit:    commit,
 	}

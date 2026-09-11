@@ -1,6 +1,11 @@
 # bear apply
 
-Execute the plan from `.bear/plan.yml`. Deploy in parallel, update lock file.
+Execute the plan from `.bear/plan.yml`. For every deploying artifact, apply is the
+only place anything ever runs: it runs the language's build steps
+(`languages.<lang>.steps`) first, then the target's deploy steps, in one
+continuous progress task per artifact. This is uniform for every deployment the
+plan approved, pinned or not — there is a single code path, not a special case for
+pins. Deploy in parallel, update lock file.
 
 ```bash
 bear apply                     # Execute plan
@@ -16,8 +21,45 @@ policy or the intended environment. Old saved plans lacking allowlist snapshots
 must be regenerated before apply.
 
 Artifacts with absent or empty allowlists, or allowlists excluding the selected
-environment, are not deployed or recorded in the lock file. A validation-only plan
-has nothing to deploy.
+environment, are not deployed or recorded in the lock file. A plan with nothing to
+deploy has nothing for apply to run.
+
+## The Saved Plan Is the Authority
+
+Apply deliberately never reads the current `bear.config.yml`. The saved plan is the
+approved snapshot, so **no change to the project's declared environments can make
+apply reject an approved plan on policy grounds**: a plan for `preprd` still applies
+to `preprd` after the project stops declaring it, and the lock history it writes is
+keyed under `preprd`. Apply also runs on a config that would not even load, which is
+why upgrading Bear never strands an in-flight approved plan.
+
+What apply does check is only the saved evidence: the saved environment name's
+syntax, each artifact's **saved** allowlist, and each saved `ENVIRONMENT` variable.
+
+```text
+Error: unsafe saved plan: invalid environment name "Production": use 1 to 32 characters matching [a-z][a-z0-9-]*; run 'bear plan <environment>' again
+Error: unsafe saved plan: artifact "api" has no saved deployment permission for environment preprd; run 'bear plan <environment>' again
+Error: unsafe saved plan: artifact "api" ENVIRONMENT does not match selected environment preprd; run 'bear plan <environment>' again
+```
+
+The name check is syntax only — `[a-z][a-z0-9-]*`, 1 to 32 characters — so a plan
+with no environment, or one saved as `Production`, is refused, while a well-formed
+name the project no longer declares is not. Those checks are permission evidence,
+not an instruction to reload policy, so none of them names a fixed set of
+environments. Apply also refuses a plan whose source commit or fingerprint is
+missing, and a duplicate artifact or mismatched pin. Every one of these preflight
+failures happens before any subprocess, lock write, or Git command, and leaves the
+plan and lock file untouched.
+
+!!! warning "Editing the config still breaks the plan — as source, not as policy"
+    `bear.config.yml` is ordinary tracked source, and only `bear.lock.yml` and
+    `.bear/` are exempt from the
+    [source fingerprint](../concepts/plan-apply.md#source-safety). Editing it in the
+    approved checkout between plan and apply therefore fails with
+    `source commit or fingerprint does not match saved plan; run 'bear plan
+    <environment>' again` — the same result as editing any other file, and nothing to
+    do with what the file says about environments. Apply an in-flight plan before
+    changing the config, or replan afterwards.
 
 ## Flags
 
@@ -33,7 +75,8 @@ A lower `--concurrency` is often appropriate for production. Ten simultaneous
 deployments mean ten artifacts changing at the same instant, which is harder to
 correlate with monitoring, and puts the whole batch's load on deployment APIs,
 registries, and their rate limits at once. A smaller number spreads that out and
-keeps the log readable.
+keeps the log readable. This bounds every step apply runs — build and deploy
+alike — not only the deploy half.
 
 It bounds only how many deployments are **in flight** at a time. It does not make
 apply atomic or ordered, and a failed artifact does **not** stop the queue: the
@@ -48,15 +91,25 @@ validate the branch value rather than using untrusted PR metadata.
 
 Preflight the saved policy and paths, verify completed checkpoints against lock
 history, verify source for pending deployments, deploy, persist each completion,
-then commit/push if enabled. Normal apply requires the saved HEAD and fingerprint;
-it does not rerun validation. Pinned apply recreates the saved revision in a private
-worktree and reruns saved validation/setup steps before checking the fingerprint.
+then commit/push if enabled.
+
+For every pending artifact, "deploy" here means running its language's build
+steps and then its target's deploy steps back to back, in the same subprocess
+sequence, whether or not the plan was pinned. Apply requires the saved HEAD and
+fingerprint to still match the source before it runs anything; unlike plan, it
+never validated that source in the first place, so this check is the only
+guarantee that what apply is about to build is what was approved. A pinned plan's
+"source" is a fresh private worktree at the saved commit rather than the caller's
+checkout, created and fingerprint-checked before build steps run, then cleaned up
+after use — there is no separate replay phase, because apply always builds before
+it deploys regardless of how the source was selected.
 
 Each successful deployment atomically saves environment history, then checkpoints
 completion in the plan. Failed runs retain the plan. Retries skip completed artifacts
-only when history matches; pending artifacts still undergo source checks. Fully
-completed retries run no source commands. Success removes the plan, including a
-validation-only plan with nothing to deploy.
+only when history matches. Pending artifacts still undergo source checks, and
+still run their full build-then-deploy sequence from the start — apply has no
+notion of resuming a partially completed artifact's steps. Fully completed
+retries run no source or step commands at all.
 
 Persistence failures can leave external deployments successful without a completed
 checkpoint. Inspect and reconcile deployment status before retrying; local atomic
@@ -68,60 +121,74 @@ writes do not form a transaction with an external service. See
 
 The plan is the review artifact; apply is the execution log. Everything apply would
 recap — the environment, the deploy list, the skips — was already printed and
-approved by `bear plan`, so apply does not repeat it. A successful run is the phase
+approved by `bear plan`, so apply does not repeat it. There is exactly one phase,
+regardless of whether any artifact is pinned: `Deploying N artifact(s) to <env>`.
+Each artifact's step counter spans build and deploy steps together — build steps
+first, deploy steps after, as one numbered sequence. A successful run is the phase
 heading, the job lines, and the closing sentence:
 
 ```text
 Bear Apply
 ──────────
 
-Deploying 2 artifacts to prd
+Deploying 1 artifact to prd
 
-  checkout-api:       Deploying...
-  checkout-api:       Deploying... [1/3 Build image]
-  kira-teams-adapter: Deploying...
-  kira-teams-adapter: Deploying... [1/3 Build image]
-  checkout-api:       Still deploying... [10s elapsed, 1/3 Build image]
-  checkout-api:       Deployment complete after 15s
-  kira-teams-adapter: Deployment complete after 15s
+  api: Deploying...
+  api: Deploying... [1/4 Test]
+  api: Deploying... [2/4 Build]
+  api: Deploying... [3/4 Build image]
+  api: Deploying... [4/4 Push image]
+  api: Deployment complete after 0s
 
-Apply complete: 2 deployed, 1 skipped in 15s
+Apply complete: 1 deployed, 1 skipped in 0s
 ```
 
+Here `api`'s language defines two steps (`Test`, `Build`) and its target defines
+two more (`Build image`, `Push image`); apply numbers all four as one sequence,
+`[1/4]` through `[4/4]`, rather than resetting the counter when deployment starts.
 There is no rule, no `Environment:` block, and no `deploy (`/`skip (` section on
-success. The phase heading names the environment — `Deploying 2 artifacts to prd`
+success. The phase heading names the environment — `Deploying 1 artifact to prd`
 — so the destination is still stated once, next to the work it describes, and the
 per-job lines already report every artifact that ran. Unless `--no-commit` was
 given, a dimmed `  Lock file committed with [skip ci]` line follows the sentence
 once the lock file is published.
 
-A failure brings the summary block back, holding only the failures:
+A failing build step fails apply exactly like a failing deploy step: the same
+progress line, the same `failed (N):` entry, and the same nonzero exit. The
+failing step's name is part of the reason either way, so the summary alone tells
+you whether a deployment failed before or after it started actually deploying:
 
 ```text
-  kira-teams-adapter: Deployment failed after 11s: Push image: exit status 1
-    denied-missing-registry-credentials
+Bear Apply
+──────────
+
+Deploying 1 artifact to prd
+
+  api: Deploying...
+  api: Deploying... [1/4 Test]
+  api: Deployment failed after 0s: Test: exit status 1
 
 ────────────────────────────────────────
 Environment: prd
 
-failed (2):
-  - checkout-api (services/checkout-api): Push image: exit status 1
-  - kira-teams-adapter (services/kira/teams-adapter): Push image: exit status 1
+failed (1):
+  - api (services/api): Test: exit status 1
 
-Apply failed: 0 deployed, 2 failed, 1 skipped in 11s
+Apply failed: 0 deployed, 1 failed, 1 skipped in 0s
 ```
 
 The rule, `Environment: <env>`, and the red `failed (N):` list are printed only
 when a pending deployment did not complete, so failures are never buried in a recap
 of things that went fine. Entries are one line each,
-`  - <name> (<path>): <reason>`, with the failing step's error as the reason, sorted
-by name so two runs of the same plan are comparable even though jobs finish in any
-order. This list is an index into the log above it, not a replacement: the bounded
-output tail stays indented four spaces under the job line that reported the
-failure.
+`  - <name> (<path>): <reason>`, with the failing step's error as the reason —
+`Test: exit status 1` for a failing build step, `Push image: exit status 1` for a
+failing deploy step, the same format either way — sorted by name so two runs of
+the same plan are comparable even though jobs finish in any order. This list is an
+index into the log above it, not a replacement: the bounded output tail stays
+indented four spaces under the job line that reported the failure.
 
-Apply closes with one sentence: `Apply complete: 2 deployed, 1 skipped in 15s`, or
-`Apply failed: 0 deployed, 2 failed, 1 skipped in 11s` when a deployment did not
+Apply closes with one sentence: `Apply complete: 1 deployed, 1 skipped in 0s`, or
+`Apply failed: 0 deployed, 1 failed, 1 skipped in 0s` when a deployment did not
 complete. The deployed count is always reported; failed and skipped counts appear
 only when there are any. The skipped count covers both the plan's recorded skips
 and artifacts already checkpointed by an earlier run.
@@ -132,17 +199,30 @@ and the retained plan are the record of what is already deployed. A plan with no
 artifacts short-circuits before the `Bear Apply` header: it prints exactly one
 line, `Plan for prd contains no artifacts to deploy.`, then removes the plan.
 
-Pinned apply reruns saved validation before deploying, in its own
-`Validating <n> artifacts` phase reported with `Validating...` /
-`Still validating...` / `Validation complete` lines and closed by
-`Validation complete: <n> artifacts in <time>`. Without a terminal, every job
-reports one line per status change with names padded into a common column, plus a
-`Still deploying...` line every 10 seconds carrying the remaining backlog as
-`(1 job queued)` on the last running job; interactive terminals draw an animated
-progress bar instead. Failure lines are followed by the bounded output tail
-indented four spaces, and `--verbose` streams subprocess output as
-`  <artifact> | <step> | <line>`. See [Live Output](../ci-cd.md#live-output) and
+Without a terminal, every job reports one line per status change with names
+padded into a common column, plus a `Still deploying...` line every 10 seconds
+carrying the remaining backlog as `(1 job queued)` on the last running job;
+interactive terminals draw an animated progress bar instead. Failure lines are
+followed by the bounded output tail indented four spaces, and `--verbose` streams
+subprocess output as `  <artifact> | <step> | <line>` for both build and deploy
+steps alike. See [Live Output](../ci-cd.md#live-output) and
 [plan output](plan.md#output).
+
+## Plan File Schema
+
+Each artifact apply runs comes from `.bear/plan.yml`'s `artifacts` list. The two
+step lists it saves map directly onto this page's execution order:
+
+| Field | Description |
+|-------|-------------|
+| `build_steps` | The language's steps (`languages.<lang>.steps`), run first |
+| `steps` | The target's deploy steps, run after `build_steps` |
+
+Both are ordinary saved `Step` lists — apply does not distinguish them once it
+starts running; they are simply concatenated into one sequence per artifact for
+numbering and execution. See [Plan/Apply Workflow](../concepts/plan-apply.md) for
+the rest of the schema and [Configuration](../configuration.md) for how
+`build_steps` and `steps` are populated from `languages` and `targets`.
 
 ## Git Publication
 
@@ -167,3 +247,4 @@ will refuse the now-local-ahead HEAD, not push it automatically. After safely
 publishing that exact lock commit and reconciling state, rerun apply to finish;
 matching completed checkpoints prevent redeployment. Never force-push or discard
 the checkpoint just to make the job green.
+</content>

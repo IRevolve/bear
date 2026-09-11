@@ -5,7 +5,8 @@ use `dir('examples')`; locally run commands from that directory:
 
 ```bash
 cd examples
-bear check
+bear doctor
+bear validate
 bear plan dev
 ```
 
@@ -16,11 +17,15 @@ are retained but ignored, not automatically mapped to environment history.
 Never treat placeholder or legacy history as evidence of a deployment.
 
 Normal plans with deployments require the whole Git repository to be clean before
-validation, except Bear state. Commit intended configuration/source edits first.
-Validation cannot change tracked source or HEAD. Nonignored generated files enter
-the saved fingerprint; normal apply needs those same files and does not rerun
-validation. Ignored dependencies and outputs are excluded, so their immutability
-and reproducible provisioning are your responsibility.
+planning, except Bear state. Commit intended configuration/source edits first.
+Plan itself never modifies tracked source or HEAD — it runs no commands at all.
+`bear apply` verifies the saved commit and fingerprint match before it builds or
+deploys anything, and since apply always builds fresh immediately before it
+deploys, a receiving checkout does not need to already contain build output from
+wherever the plan was created — only the same tracked commit and nonignored
+untracked files. Ignored dependencies and outputs are excluded from the
+fingerprint regardless, so provision them the same way you would for any fresh
+build.
 
 ## Toolchains
 
@@ -46,8 +51,16 @@ Apply also needs target-specific tools and credentials: Docker plus a daemon and
 gcloud for Cloud Run, AWS CLI and zip for Lambda, AWS CLI for S3, or Podman for
 `docker-local`. The validation image does not supply these. Provision only what
 you need; do not expose deployment secrets or a host Docker socket to PRs.
-All demonstration artifacts explicitly allow `dev`, `int`, and `prd`. Remove
-environments you do not intend to deploy. Missing/empty allowlists deny deployment.
+
+## Environments
+
+`examples/bear.config.yml` declares `environments: [dev, int, prd]`. That list is
+this project's choice, not a Bear built-in: rename it, cut it to one entry, or use
+`[preprd, prd]` instead, and every command follows. All six demonstration artifacts
+allow exactly those three environments, and an allowlist entry that the config does
+not declare fails `bear doctor`, `bear validate` and `bear plan`. Remove the
+environments you do not intend to deploy from both places. Missing or empty
+allowlists deny deployment while retaining change detection.
 
 ## Webhook Targets
 
@@ -76,14 +89,23 @@ either to real webhook traffic.
 ## Jenkins Setup
 
 Configure the multibranch script path as `examples/Jenkinsfile` or
-`examples/Jenkinsfile.docker`. For the host-agent template, provide `BEAR_VERSION`
-as a reviewed release tag such as `v4.0.0`,
-and put `$(go env GOPATH)/bin` on the agent PATH. The template installs from a tagged
-checkout outside the workspace because the Go module has no `/v4` suffix.
+`examples/Jenkinsfile.docker`; see [Jenkins Freeze/Unfreeze
+Template](#jenkins-freezeunfreeze-template) below for the separate,
+parameter-driven `examples/Jenkinsfile.freeze`. For the host-agent template,
+provide `BEAR_VERSION` as a reviewed release tag such as `v5.0.0`,
+and put `$(go env GOPATH)/bin` on the agent PATH. Its `Install` stage installs from
+a tagged checkout outside the workspace because the Go module has no `/v4` suffix.
 The Docker template expects the
 custom image above, extended with deployment tools.
 
-Both templates validate from `examples/`. Apply runs only on trusted `main`,
+Both templates run a `Validate` stage guarded by `changeRequest()`: a change
+request runs `bear validate` from `examples/` and nothing else. That stage takes
+no credentials, needs no environment argument and no Git history, writes no plan
+and no lock file, and never runs apply. The `Plan` stage carries the complementary
+`not { changeRequest() }` guard, so a change request cannot produce a production
+plan it is not allowed to apply.
+
+Both templates run Bear from `examples/`. Apply runs only on trusted `main`,
 rejects change requests, validates the branch, sets author/committer identity via
 environment variables, and uses `gitUsernamePassword` for temporary authentication.
 Configure the Jenkins Git tool named `Default` and credential `git-credentials`;
@@ -106,3 +128,30 @@ The skip helper skips only a single bot lock-only update since the prior build.
 Missing history, non-bot identity, merge commits, and mixed file changes run CI.
 Do not add `[skip ci]` to source commits: provider-level skip handling can bypass
 the pipeline before this helper gets a chance to run.
+
+## Jenkins Freeze/Unfreeze Template
+
+`examples/Jenkinsfile.freeze` is a separate, manually-triggered ("Build with
+Parameters") pipeline for freezing one or all deployables to a fixed commit, or
+explicitly unfreezing one. It exposes `ENVIRONMENT`, `DEPLOYABLE`, `REF`, and
+`FORCE` as build parameters around `bear plan`'s existing `--pin` and `--force`
+flags — there is no dedicated Bear "freeze" command. Use it instead of, not in
+addition to, `examples/Jenkinsfile`/`examples/Jenkinsfile.docker` for a given
+deployment job:
+
+- Reach for the plain commit-triggered templates when every push to `main`
+  should simply deploy whatever changed.
+- Reach for `Jenkinsfile.freeze` when an operator needs to pin a specific
+  deployable to a known-good commit ahead of a release window, or unfreeze it
+  again on demand, without waiting for a new commit.
+
+It reuses the same identity variables, `gitUsernamePassword` credential binding,
+trusted-`main`/`changeRequest()` guards, `--git-remote`/`--git-branch` flags,
+install-from-tag block, and `disableConcurrentBuilds()` as the other two
+templates. A scripted guard rejects `FORCE=true` with an empty `DEPLOYABLE`
+before Bear ever runs, because `--force` without an artifact filter would
+otherwise unfreeze every artifact in the selection. See
+[Freeze & Unfreeze (Jenkins)](https://github.com/irevolve/bear/blob/main/docs/concepts/freeze-unfreeze.md)
+for the full explanation, including why `REF` must be fetched first (Bear does
+not fetch remote refs itself) and why an unknown `DEPLOYABLE` name fails the
+build instead of silently doing nothing.

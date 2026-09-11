@@ -18,7 +18,8 @@ var listCmd = &cobra.Command{
 Shows each artifact's name, language, target, and dependencies.
 
 Use --tree to display as a dependency tree. Artifact arguments select a tree.
-Deployment status is displayed separately for dev, int, and prd.
+Deployment status is displayed separately for each environment declared in
+bear.config.yml.
 
 Examples:
   bear list                # List all artifacts

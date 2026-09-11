@@ -35,8 +35,10 @@ theme:
 nav:
   - Home: index.md
   - Getting Started: getting-started.md
+  - Upgrade to v5: migration-v5.md
   - Upgrade to v4: migration-v4.md
   - Releases:
+      - v5.0.0: releases/v5.0.0.md
       - v4.1.0: releases/v4.1.0.md
       - v4.0.0: releases/v4.0.0.md
   - Configuration: configuration.md
@@ -44,9 +46,10 @@ nav:
   - Commands:
       - Overview: commands/index.md
       - init: commands/init.md
+      - validate: commands/validate.md
       - plan: commands/plan.md
       - apply: commands/apply.md
-      - check: commands/check.md
+      - doctor: commands/doctor.md
       - list: commands/list.md
       - preset: commands/preset.md
   - Concepts:
@@ -55,6 +58,7 @@ nav:
       - Dependencies: concepts/dependencies.md
       - Lock File: concepts/lock-file.md
       - Pinning & Rollback: concepts/pinning.md
+      - Freeze & Unfreeze (Jenkins): concepts/freeze-unfreeze.md
       - Plan/Apply: concepts/plan-apply.md
 
 markdown_extensions:

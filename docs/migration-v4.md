@@ -1,5 +1,12 @@
 # Migrate a Monorepo to v4
 
+!!! note "Already on v4?"
+    This page describes the move **to** v4.0.0 and its rules as v4 shipped them.
+    Going from v4 to v5, read [Upgrade to v5](migration-v5.md) instead: v5.0.0
+    replaces v4's hardcoded `dev`/`int`/`prd` with a required `environments` list in
+    `bear.config.yml`, so wherever this page says those three names are the valid
+    values, v5 reads them from your project.
+
 v4.0.0 changes deployment policy, history, and saved plans. Pause automated apply
 jobs while updating configuration and reviewing the first plan for each environment.
 See [release notes](releases/v4.0.0.md) for the significant fixes.

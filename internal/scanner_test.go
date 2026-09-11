@@ -60,14 +60,14 @@ func TestScannerIgnoredDirectories(t *testing.T) {
 
 func TestLoaderEmptyDeploymentTarget(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "bear.config.yml")
-	writeScannerFixture(t, path, "name: project\nlanguages: {go: {steps: []}}\ntargets: {docker: {steps: []}}\n")
+	writeScannerFixture(t, path, "name: project\nenvironments: [dev]\nlanguages: {go: {steps: []}}\ntargets: {docker: {steps: []}}\n")
 	if _, err := config.Load(path); err != nil {
 		t.Fatalf("syntax-level config load rejected empty steps: %v", err)
 	}
 	if _, err := Load(path); err == nil || !strings.Contains(err.Error(), "no deployment steps") {
 		t.Fatalf("effective config accepted empty deployment: %v", err)
 	}
-	writeScannerFixture(t, path, "name: project\nlanguages: {go: {steps: []}}\n")
+	writeScannerFixture(t, path, "name: project\nenvironments: [dev]\nlanguages: {go: {steps: []}}\n")
 	if _, err := Load(path); err != nil {
 		t.Fatalf("validation-only config rejected: %v", err)
 	}

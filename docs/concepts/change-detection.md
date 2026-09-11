@@ -18,9 +18,10 @@ deployment baseline, not the dependency's own history. Missing history means a
 new artifact in that environment. Legacy artifact-only history is retained but
 ignored rather than assigned to an environment.
 
-Detecting uncommitted changes is not permission to deploy dirty source. Normal
-plans with any deployments require clean source before validation; validation-only
-plans may start dirty. Validation must not change HEAD or the tracked working-tree
-diff. Generated nonignored files enter the saved post-validation fingerprint,
-which apply verifies before pending deployments. Ignored dependencies and outputs
-are outside that fingerprint. See [Source Safety](plan-apply.md#source-safety).
+Detecting uncommitted changes is not permission to deploy dirty source. A normal
+plan with any deployments requires clean source before it runs; a plan with
+nothing to deploy may start dirty. Plan itself never modifies HEAD or the tracked
+working-tree diff — it runs no commands at all. `bear apply` verifies the saved
+commit and fingerprint match before it runs anything, exactly as it would for any
+other edited file. Ignored dependencies and outputs are outside that fingerprint.
+See [Source Safety](plan-apply.md#source-safety).

@@ -28,8 +28,26 @@ pipeline {
                 }
             }
         }
+        // Change requests validate only: no environment, no plan, no credentials.
+        // bear validate runs no Git, so a shallow change-request checkout is enough.
+        stage('Validate') {
+            when {
+                allOf {
+                    changeRequest()
+                    expression { env.LOCK_ONLY != 'true' }
+                }
+            }
+            steps {
+                dir('examples') { sh 'bear validate' }
+            }
+        }
         stage('Plan') {
-            when { expression { env.LOCK_ONLY != 'true' } }
+            when {
+                allOf {
+                    not { changeRequest() }
+                    expression { env.LOCK_ONLY != 'true' }
+                }
+            }
             steps {
                 dir('examples') { sh 'bear plan prd' }
             }

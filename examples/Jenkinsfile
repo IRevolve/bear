@@ -23,7 +23,7 @@ pipeline {
                 }
             }
         }
-        stage('Plan') {
+        stage('Install') {
             when { expression { env.LOCK_ONLY != 'true' } }
             steps {
                 // Install a reviewed release outside the checkout, not a moving latest.
@@ -36,6 +36,29 @@ pipeline {
                     git clone --branch "$BEAR_VERSION" --depth 1 https://github.com/irevolve/bear.git "$install_dir/bear"
                     go -C "$install_dir/bear" install -ldflags="-X github.com/irevolve/bear/commands.Version=${BEAR_VERSION#v}" .
                 '''
+            }
+        }
+        // Change requests validate only: no environment, no plan, no credentials.
+        // bear validate runs no Git, so a shallow change-request checkout is enough.
+        stage('Validate') {
+            when {
+                allOf {
+                    changeRequest()
+                    expression { env.LOCK_ONLY != 'true' }
+                }
+            }
+            steps {
+                dir('examples') { sh 'bear validate' }
+            }
+        }
+        stage('Plan') {
+            when {
+                allOf {
+                    not { changeRequest() }
+                    expression { env.LOCK_ONLY != 'true' }
+                }
+            }
+            steps {
                 dir('examples') {
                     sh 'bear plan prd'
                 }

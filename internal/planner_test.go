@@ -58,7 +58,7 @@ func TestGetValidationSteps(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			steps := getValidationSteps(cfg, tt.language)
+			steps := ValidationSteps(cfg, tt.language)
 
 			if len(steps) != tt.expectedCount {
 				t.Errorf("expected %d steps, got %d", tt.expectedCount, len(steps))
@@ -122,6 +122,64 @@ func TestFilterArtifacts(t *testing.T) {
 				if i < len(result) && result[i].Artifact.Name != name {
 					t.Errorf("expected artifact '%s', got '%s'", name, result[i].Artifact.Name)
 				}
+			}
+		})
+	}
+}
+
+func TestRequireKnownArtifacts(t *testing.T) {
+	artifacts := []DiscoveredArtifact{
+		{Path: "/path/to/api", Artifact: &config.Artifact{Name: "user-api"}},
+		{Path: "/path/to/web", Artifact: &config.Artifact{Name: "dashboard"}},
+	}
+
+	tests := []struct {
+		name      string
+		requested []string
+		filtered  []DiscoveredArtifact
+		wantError string
+	}{
+		{
+			name:      "no filter",
+			requested: nil,
+			filtered:  artifacts,
+		},
+		{
+			name:      "all requested names matched",
+			requested: []string{"user-api"},
+			filtered:  artifacts[:1],
+		},
+		{
+			name:      "single unmatched name",
+			requested: []string{"typo"},
+			filtered:  nil,
+			wantError: `unknown artifact "typo"`,
+		},
+		{
+			name:      "unmatched name mixed with a matched one",
+			requested: []string{"user-api", "typo"},
+			filtered:  artifacts[:1],
+			wantError: `unknown artifact "typo"`,
+		},
+		{
+			name:      "multiple unmatched names are sorted and deduplicated",
+			requested: []string{"zeta", "alpha", "zeta"},
+			filtered:  nil,
+			wantError: `unknown artifact "alpha", "zeta"`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := requireKnownArtifacts(tt.requested, tt.filtered)
+			if tt.wantError == "" {
+				if err != nil {
+					t.Fatalf("expected no error, got %v", err)
+				}
+				return
+			}
+			if err == nil || err.Error() != tt.wantError {
+				t.Fatalf("expected %q, got %v", tt.wantError, err)
 			}
 		})
 	}

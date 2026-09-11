@@ -63,7 +63,7 @@ func applySourceAbsent(t *testing.T, path string) {
 }
 
 func TestApplySourceRejectsDriftBeforeDeployment(t *testing.T) {
-	for _, scenario := range []string{"missing fingerprint", "missing commit", "tracked", "untracked", "generated", "head only", "staged", "absolute path", "traversal", "symlink", "validation path"} {
+	for _, scenario := range []string{"missing fingerprint", "missing commit", "tracked", "untracked", "generated", "head only", "staged", "absolute path", "traversal", "symlink"} {
 		t.Run(scenario, func(t *testing.T) {
 			root, plan := applySourceFixture(t, "touch .bear/deployed", "touch .bear/second")
 			switch scenario {
@@ -90,8 +90,6 @@ func TestApplySourceRejectsDriftBeforeDeployment(t *testing.T) {
 					t.Skipf("symlinks unavailable: %v", err)
 				}
 				plan.Artifacts[1].Path = "escape"
-			case "validation path":
-				plan.Validations = []config.PlanValidation{{Name: "invalid", Path: "../outside", Vars: map[string]string{"ENVIRONMENT": "int"}}}
 			}
 			applySourceSave(t, root, plan)
 			before := applySourceRead(t, config.PlanFilePath(root))
@@ -141,6 +139,72 @@ func TestApplySourceUsesSnapshotAndEnvironmentHistory(t *testing.T) {
 	}
 	if sourceTestGit(t, root, "rev-parse", "HEAD") != plan.Commit || sourceTestGit(t, root, "ls-files", "--stage") != beforeIndex {
 		t.Fatal("NoCommit modified HEAD or index")
+	}
+}
+
+// A normal (non-pinned) deploy runs the language's build steps before the
+// target's deploy step, as one continuous numbered sequence in the same task.
+func TestApplySourceRunsBuildStepsBeforeDeploySteps(t *testing.T) {
+	root, plan := applySourceFixture(t, "test -f .bear/built && printf deployed > .bear/deployed")
+	plan.Artifacts[0].BuildSteps = []config.Step{{Name: "build", Run: "printf built > .bear/built"}}
+	applySourceSave(t, root, plan)
+	output, err := captureEnvironmentOutput(t, func() error {
+		return ApplyWithOptions(filepath.Join(root, "bear.config.yml"), Options{NoCommit: true, Concurrency: 1})
+	})
+	if err != nil {
+		t.Fatalf("%v\n%s", err, output)
+	}
+	for _, text := range []string{"a: Deploying... [1/2 build]", "a: Deploying... [2/2 deploy]"} {
+		if !strings.Contains(output, text) {
+			t.Errorf("apply did not report a continuous build-then-deploy sequence %q: %s", text, output)
+		}
+	}
+	built, err := os.Stat(filepath.Join(root, ".bear/built"))
+	if err != nil {
+		t.Fatalf("build step did not run: %v", err)
+	}
+	deployed, err := os.Stat(filepath.Join(root, ".bear/deployed"))
+	if err != nil {
+		t.Fatalf("deploy step did not run: %v", err)
+	}
+	if built.ModTime().After(deployed.ModTime()) {
+		t.Errorf("build step ran after deploy step: build=%v deploy=%v", built.ModTime(), deployed.ModTime())
+	}
+}
+
+// A failing build step fails apply exactly like a failing deploy step: the
+// deploy step never runs, and the failure is reported in the failed summary.
+func TestApplySourceFailingBuildStepFailsApply(t *testing.T) {
+	root, plan := applySourceFixture(t, "printf deployed > .bear/deployed")
+	plan.Artifacts[0].BuildSteps = []config.Step{{Name: "build", Run: "exit 1"}}
+	applySourceSave(t, root, plan)
+	output, err := captureEnvironmentOutput(t, func() error {
+		return ApplyWithOptions(filepath.Join(root, "bear.config.yml"), Options{NoCommit: true, Concurrency: 1})
+	})
+	if err == nil || !strings.Contains(err.Error(), "build: exit status 1") {
+		t.Fatalf("expected build step failure, got %v\n%s", err, output)
+	}
+	for _, text := range []string{
+		"a: Deployment failed after ",
+		summaryRule,
+		"failed (1):",
+		"  - a (.): build: exit status 1",
+		"Apply failed: 0 deployed, 1 failed in ",
+	} {
+		if !strings.Contains(output, text) {
+			t.Errorf("apply output missing %q: %s", text, output)
+		}
+	}
+	applySourceAbsent(t, filepath.Join(root, ".bear/deployed"))
+	if !config.PlanExists(root) {
+		t.Fatal("failed plan removed")
+	}
+	lock, err := config.LoadLock(filepath.Join(root, "bear.lock.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := lock.GetArtifact("int", "a"); ok {
+		t.Errorf("failed build step recorded as deployed: %+v", lock.Environments)
 	}
 }
 
@@ -326,27 +390,29 @@ func TestApplySourceContextAndWorkspaceLock(t *testing.T) {
 	}
 }
 
-func TestApplySourcePinnedRebuildsAllSavedValidations(t *testing.T) {
-	for _, scenario := range []string{"success", "validation failure", "nondeterministic output", "commit mismatch", "deploy failure"} {
+// A pinned deploy runs its saved build steps in the isolated worktree exactly
+// like a normal deploy: build steps first, then the deploy step, both against
+// the pinned commit, never the caller's dirty workspace.
+func TestApplySourcePinnedRebuildsSavedBuildSteps(t *testing.T) {
+	for _, scenario := range []string{"success", "build step failure", "nondeterministic output", "commit mismatch", "deploy failure"} {
 		t.Run(scenario, func(t *testing.T) {
 			root, plan := applySourceFixture(t, `test "$(cat app/source)" = approved && test "$(cat app/generated)" = rebuilt && test "$(cat node_modules/dependency)" = installed && cat app/generated >> "$RECEIPT"`)
 			receipt := filepath.Join(t.TempDir(), "receipt")
-			validationReceipt := filepath.Join(t.TempDir(), "validations")
+			buildReceipt := filepath.Join(t.TempDir(), "builds")
 			plan.Pinned = true
 			plan.Artifacts[0].Pinned = true
 			plan.Artifacts[0].PinCommit = plan.Commit
 			plan.Artifacts[0].Vars["RECEIPT"] = receipt
-			plan.Validations = []config.PlanValidation{
-				{Name: "dependency-only", Path: ".", Vars: map[string]string{"ENVIRONMENT": "int", "VALIDATIONS": validationReceipt}, Steps: []config.Step{{Name: "setup", Run: `test ! -e node_modules/dependency && mkdir -p node_modules && printf installed > node_modules/dependency && printf dependency >> "$VALIDATIONS"`}}},
-				{Name: "a", Path: "app", Vars: map[string]string{"ENVIRONMENT": "int", "VALUE": "rebuilt", "VALIDATIONS": validationReceipt}, Steps: []config.Step{{Name: "build", Run: `test "$ENVIRONMENT" = int && printf "%s" "$VALUE" > generated && printf app >> "$VALIDATIONS"`}}},
+			plan.Artifacts[0].Vars["VALUE"] = "rebuilt"
+			plan.Artifacts[0].Vars["BUILDS"] = buildReceipt
+			plan.Artifacts[0].BuildSteps = []config.Step{
+				{Name: "setup", Run: `test ! -e node_modules/dependency && mkdir -p node_modules && printf installed > node_modules/dependency && printf dependency >> "$BUILDS"`},
+				{Name: "build", Run: `test "$ENVIRONMENT" = int && printf "%s" "$VALUE" > app/generated && printf app >> "$BUILDS"`},
 			}
-			// Planning approves the deterministic post-validation source, not the
-			// pristine checkout. Apply must regenerate this file in its own tree.
-			sourceTestWrite(t, root, "app/generated", "rebuilt")
+			// Apply verifies the approved fingerprint before running any build
+			// step, so the approved fingerprint is the pristine pinned commit,
+			// not the state a build step will produce.
 			_, plan.SourceFingerprint, _ = sourceTestState(t, root)
-			if err := os.Remove(filepath.Join(root, "app/generated")); err != nil {
-				t.Fatal(err)
-			}
 			sourceTestWrite(t, root, "app/source", "new HEAD\n")
 			callerCommit := sourceTestCommit(t, root)
 			sourceTestWrite(t, root, "app/source", "dirty caller\n")
@@ -356,10 +422,10 @@ func TestApplySourcePinnedRebuildsAllSavedValidations(t *testing.T) {
 			beforeIndex := sourceTestGit(t, root, "ls-files", "--stage")
 			beforeConfig := applySourceRead(t, filepath.Join(root, ".git/config"))
 			switch scenario {
-			case "validation failure":
-				plan.Validations[0].Steps[0].Run = "exit 1"
+			case "build step failure":
+				plan.Artifacts[0].BuildSteps[0].Run = "exit 1"
 			case "nondeterministic output":
-				plan.Validations[1].Vars["VALUE"] = "different output"
+				plan.Artifacts[0].Vars["VALUE"] = "different output"
 			case "commit mismatch":
 				plan.Commit = "HEAD"
 				plan.Artifacts[0].PinCommit = "HEAD"
@@ -375,8 +441,8 @@ func TestApplySourcePinnedRebuildsAllSavedValidations(t *testing.T) {
 				if got := applySourceRead(t, receipt); got != "rebuilt" {
 					t.Fatalf("deployed wrong source: %q", got)
 				}
-				if got := applySourceRead(t, validationReceipt); got != "dependencyapp" {
-					t.Fatalf("did not rerun all validations: %q", got)
+				if got := applySourceRead(t, buildReceipt); got != "dependencyapp" {
+					t.Fatalf("did not run build steps in order: %q", got)
 				}
 				lock, err := config.LoadLock(filepath.Join(root, "bear.lock.yml"))
 				if err != nil {

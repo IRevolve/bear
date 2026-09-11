@@ -39,7 +39,7 @@ func ApplyWithOptions(configPath string, opts Options) (retErr error) {
 
 	planFile, err := config.ReadPlan(rootPath)
 	if os.IsNotExist(err) {
-		return fmt.Errorf("no plan found. Run 'bear plan <environment>' first (dev, int, or prd)")
+		return fmt.Errorf("no plan found. Run 'bear plan <environment>' first")
 	}
 	if err != nil {
 		return fmt.Errorf("error reading plan file: %w", err)
@@ -53,17 +53,28 @@ func ApplyWithOptions(configPath string, opts Options) (retErr error) {
 
 	// Preflight the entire snapshot before any subprocess or history update.
 	// Saved permissions are evidence, not instructions to reload current config.
-	if err := config.ValidateEnvironment(planFile.Environment); err != nil {
-		return fmt.Errorf("unsafe saved plan: %w; run 'bear plan <environment>' again (dev, int, or prd)", err)
+	// Only the syntax of the saved environment is checked: renaming or retiring
+	// an environment in bear.config.yml must not invalidate an approved plan.
+	//
+	// The schema version is checked first, before anything else in the plan is
+	// trusted: a plan written by an older (or newer) binary may be missing
+	// fields this binary now depends on, and unmarshaling that as zero values
+	// (e.g. zero build steps) must never be mistaken for an intentional plan.
+	if planFile.Version != config.CurrentPlanFileVersion {
+		return fmt.Errorf("unsafe saved plan: schema version %d (want %d); run 'bear plan <environment>' again", planFile.Version, config.CurrentPlanFileVersion)
+	}
+	if err := config.ValidateEnvironmentName(planFile.Environment); err != nil {
+		return fmt.Errorf("unsafe saved plan: %w; run 'bear plan <environment>' again", err)
 	}
 	for _, artifact := range planFile.Artifacts {
 		if !slices.Contains(artifact.Environments, planFile.Environment) {
-			return fmt.Errorf("unsafe saved plan: artifact %q has no saved deployment permission for environment %s; run 'bear plan <environment>' again (dev, int, or prd)", artifact.Name, planFile.Environment)
+			return fmt.Errorf("unsafe saved plan: artifact %q has no saved deployment permission for environment %s; run 'bear plan <environment>' again", artifact.Name, planFile.Environment)
 		}
 		if artifact.Vars["ENVIRONMENT"] != planFile.Environment {
-			return fmt.Errorf("unsafe saved plan: artifact %q ENVIRONMENT does not match selected environment %s; run 'bear plan <environment>' again (dev, int, or prd)", artifact.Name, planFile.Environment)
+			return fmt.Errorf("unsafe saved plan: artifact %q ENVIRONMENT does not match selected environment %s; run 'bear plan <environment>' again", artifact.Name, planFile.Environment)
 		}
 	}
+
 	if planFile.Commit == "" || planFile.SourceFingerprint == "" {
 		return fmt.Errorf("unsafe saved plan: missing source commit or fingerprint; run 'bear plan <environment>' again")
 	}
@@ -75,11 +86,6 @@ func ApplyWithOptions(configPath string, opts Options) (retErr error) {
 		seen[artifact.Name] = true
 		if artifact.Pinned && (!planFile.Pinned || artifact.PinCommit != "" && artifact.PinCommit != planFile.Commit) {
 			return fmt.Errorf("unsafe saved plan: artifact %q pin does not match approved source", artifact.Name)
-		}
-	}
-	for _, validation := range planFile.Validations {
-		if validation.Vars["ENVIRONMENT"] != planFile.Environment {
-			return fmt.Errorf("unsafe saved plan: validation %q ENVIRONMENT does not match selected environment %s; run 'bear plan <environment>' again", validation.Name, planFile.Environment)
 		}
 	}
 
@@ -134,12 +140,6 @@ func ApplyWithOptions(configPath string, opts Options) (retErr error) {
 			return fmt.Errorf("unsafe saved plan: artifact %q: %w; run 'bear plan <environment>' again", artifact.Name, err)
 		}
 	}
-	for _, validation := range planFile.Validations {
-		if _, err := safeArtifactPath(sourceRoot, validation.Path); err != nil {
-			return fmt.Errorf("unsafe saved plan: validation %q: %w; run 'bear plan <environment>' again", validation.Name, err)
-		}
-	}
-
 	runSteps := func(ctx context.Context, pt *ProgressTracker, i int, path string, vars map[string]string, steps []config.Step) error {
 		pt.MarkRunning(i)
 		for stepIndex, step := range steps {
@@ -167,37 +167,6 @@ func ApplyWithOptions(configPath string, opts Options) (retErr error) {
 	}
 
 	p.BearHeader("Apply")
-	if planFile.Pinned && len(pending) > 0 && len(planFile.Validations) > 0 {
-		names := make([]string, len(planFile.Validations))
-		for i, validation := range planFile.Validations {
-			names[i] = validation.Name
-		}
-		p.PhaseHeader("Validating " + plural(len(names), "artifact", "artifacts"))
-		pt := NewProgressTracker(p, names)
-		pt.SetOperation("validate")
-		if opts.Verbose {
-			pt.UsePlainOutput()
-		}
-		pt.Start()
-		errs := RunParallel(ctx, opts.Concurrency, len(names), func(ctx context.Context, i int) error {
-			v := planFile.Validations[i]
-			if err := runSteps(ctx, pt, i, v.Path, v.Vars, v.Steps); err != nil {
-				return err
-			}
-			pt.MarkDone(i)
-			return nil
-		})
-		for i, err := range errs {
-			if err != nil {
-				pt.MarkFailed(i, err, "")
-			}
-		}
-		pt.Stop()
-		if err := errors.Join(errs...); err != nil {
-			return fmt.Errorf("pinned validation failed; plan retained: %w", err)
-		}
-		printResult(p, p.green, "Validation complete", []string{plural(len(names), "artifact", "artifacts")}, pt.TotalElapsed())
-	}
 	// Fully checkpointed retries run no source commands. They only publish history;
 	// the Git helper still refuses unrelated commits or an out-of-sync remote.
 	if len(pending) > 0 {
@@ -239,7 +208,7 @@ func ApplyWithOptions(configPath string, opts Options) (retErr error) {
 		mu.Lock()
 		artifact := planFile.Artifacts[index]
 		mu.Unlock()
-		if err := runSteps(ctx, pt, i, artifact.Path, artifact.Vars, artifact.Steps); err != nil {
+		if err := runSteps(ctx, pt, i, artifact.Path, artifact.Vars, append(append([]config.Step(nil), artifact.BuildSteps...), artifact.Steps...)); err != nil {
 			return err
 		}
 		mu.Lock()

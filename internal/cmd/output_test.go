@@ -28,7 +28,7 @@ func TestBearHeaderBrandsEachCommand(t *testing.T) {
 	for _, test := range []struct{ command, want string }{
 		{"Plan", "\nBear Plan\n─────────\n"},
 		{"Apply", "\nBear Apply\n──────────\n"},
-		{"Check", "\nBear Check\n──────────\n"},
+		{"Doctor", "\nBear Doctor\n───────────\n"},
 	} {
 		var out bytes.Buffer
 		NewPrinterWithWriter(&out).BearHeader(test.command)

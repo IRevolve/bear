@@ -9,20 +9,21 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var checkCmd = &cobra.Command{
-	Use:   "check",
-	Short: "Validate configuration and dependencies",
-	Long: `Validates the Bear configuration and checks for issues:
+var doctorCmd = &cobra.Command{
+	Use:   "doctor",
+	Short: "Diagnose configuration and dependencies",
+	Long: `Diagnoses the Bear configuration and checks for issues:
 
 - Config syntax (bear.config.yml, bear.artifact.yml, bear.lib.yml)
 - All dependencies exist and can be resolved
 - No circular dependencies
 - All referenced targets exist
+- Declared environments and artifact allowlists
 - Language detection works for all artifacts
 
 Examples:
-  bear check                  # Check current directory
-  bear check -d ./project     # Check different directory`,
+  bear doctor                  # Diagnose current directory
+  bear doctor -d ./project     # Diagnose different directory`,
 	RunE: func(c *cobra.Command, args []string) error {
 		// Convert to absolute path
 		absDir, err := filepath.Abs(workDir)
@@ -35,10 +36,10 @@ Examples:
 			return fmt.Errorf("config file not found: %s", configPath)
 		}
 
-		return cmd.Check(configPath)
+		return cmd.Doctor(configPath)
 	},
 }
 
 func init() {
-	rootCmd.AddCommand(checkCmd)
+	rootCmd.AddCommand(doctorCmd)
 }

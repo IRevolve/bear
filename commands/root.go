@@ -7,7 +7,6 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/irevolve/bear/internal"
 	"github.com/spf13/cobra"
 )
 
@@ -27,21 +26,30 @@ var rootCmd = &cobra.Command{
 	Version:      Version,
 	SilenceUsage: true,
 	Long: `Bear is a CI/CD tool for monorepos that automatically detects
-changes, validates affected artifacts, and deploys them to various targets.
+changes and deploys them to various targets.
 
 It uses a plan/apply workflow to give you visibility and control over
-what gets deployed. Plan validates and creates a deployment plan,
-apply executes it.
+what gets deployed. Plan is a fast, side-effect-free decision: it detects
+changes and writes a deployment plan without running anything. Apply is
+the only command that executes: for every deploying artifact it builds
+(the language's steps) and then deploys (the target's steps).
+
+Run 'bear validate' for build/test assurance before merging or planning;
+it runs the same language steps as apply's build phase, with no
+environment or deployment semantics.
 
 Change detection is based on comparing against the last deployed commit
 for each artifact (stored in bear.lock.yml).
 
+Deployment environments are declared per project in bear.config.yml.
+
 Usage:
-  bear check                     Validate configuration and dependencies
+  bear doctor                    Diagnose configuration and dependencies
+  bear validate                  Run language build/test steps (no deployment)
   bear list                      List all artifacts
   bear list --tree               Show dependency tree
-  bear plan dev                  Validate changes and create deployment plan
-  bear apply                     Execute the deployment plan`,
+  bear plan <environment>        Detect changes and create a deployment plan
+  bear apply                     Build and deploy the plan`,
 }
 
 func Execute() error {
@@ -51,13 +59,6 @@ func Execute() error {
 }
 
 func init() {
-	// PersistentPreRunE runs before every command
-	rootCmd.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
-		// Setup logger based on verbose flag
-		internal.SetupLogger(verbose)
-		return nil
-	}
-
 	// Global Flags
 	rootCmd.PersistentFlags().StringVarP(&workDir, "dir", "d", ".", "Path to project directory")
 	rootCmd.PersistentFlags().BoolVarP(&force, "force", "f", false, "Force operation, ignoring pinned artifacts")

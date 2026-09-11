@@ -10,7 +10,10 @@ import (
 )
 
 func historyConfig() *config.Config {
-	return &config.Config{Targets: map[string]config.Target{"local": {Steps: []config.Step{{Name: "deploy", Run: "true"}}}}}
+	return &config.Config{
+		Environments: []string{"dev", "int", "prd"},
+		Targets:      map[string]config.Target{"local": {Steps: []config.Step{{Name: "deploy", Run: "true"}}}},
+	}
 }
 
 func historySave(t *testing.T, root string, lock *config.LockFile) {
@@ -253,7 +256,7 @@ func TestPlannerLibraryNeedsNoTarget(t *testing.T) {
 	detectorWrite(t, root, "bear.lib.yml", "name: library\n")
 	commit := detectorCommit(t, root)
 	for _, pin := range []string{"", commit} {
-		plan, err := CreatePlanWithOptions(root, &config.Config{}, PlanOptions{Environment: "dev", PinCommit: pin})
+		plan, err := CreatePlanWithOptions(root, &config.Config{Environments: []string{"dev"}}, PlanOptions{Environment: "dev", PinCommit: pin})
 		if err != nil {
 			t.Fatal(err)
 		}

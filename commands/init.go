@@ -13,10 +13,15 @@ import (
 )
 
 var (
-	initLanguages []string
-	initTargets   []string
-	initForce     bool
+	initLanguages    []string
+	initTargets      []string
+	initEnvironments []string
+	initForce        bool
 )
+
+// defaultInitEnvironments is the starting point for a new project. It is a
+// default, not a rule: every command reads the list from bear.config.yml.
+var defaultInitEnvironments = []string{"dev", "int", "prd"}
 
 var initCmd = &cobra.Command{
 	Use:   "init",
@@ -27,6 +32,12 @@ Uses the folder name as project name and imports the specified
 language and target presets. With no flags, creates an empty configuration;
 presets are not detected automatically and no interactive prompts are shown.
 
+The generated config declares the deployment environments of the project.
+Every later command reads that list: 'bear plan <environment>' accepts only a
+declared name, and an artifact may only allow deployment to declared names.
+Use --environments to choose your own; the default is dev,int,prd. A name must
+match [a-z][a-z0-9-]* and be at most 32 characters.
+
 Available language presets:
   go, node, typescript, python, rust, java
 
@@ -35,10 +46,11 @@ Available target presets:
   kubernetes, helm
 
 Examples:
-  bear init                           # Empty configuration
-  bear init --lang go,node            # Go + Node presets
-  bear init --lang go --target docker # Go + Docker
-  bear init -d ./new-project          # Different directory`,
+  bear init                             # Empty configuration, dev/int/prd
+  bear init --environments preprd,prd   # Custom deployment environments
+  bear init --lang go,node              # Go + Node presets
+  bear init --lang go --target docker   # Go + Docker
+  bear init -d ./new-project            # Different directory`,
 	RunE: func(c *cobra.Command, args []string) error {
 		// Convert to absolute path
 		absDir, err := filepath.Abs(workDir)
@@ -61,6 +73,15 @@ Examples:
 			return fmt.Errorf("project directory name must not be blank")
 		}
 
+		// An unloadable config is worse than no config, so the environments are
+		// validated before anything is written.
+		if len(initEnvironments) == 0 {
+			return fmt.Errorf("--environments must list at least one deployment environment, for example dev,int,prd")
+		}
+		if err := config.ValidateEnvironmentNames(initEnvironments); err != nil {
+			return fmt.Errorf("--environments: %w", err)
+		}
+
 		manager := internal.NewManager()
 
 		// Validate languages
@@ -78,7 +99,7 @@ Examples:
 		}
 
 		// Generate config
-		data, err := generateConfig(projectName, initLanguages, initTargets)
+		data, err := generateConfig(projectName, initEnvironments, initLanguages, initTargets)
 		if err != nil {
 			return err
 		}
@@ -121,17 +142,17 @@ Examples:
 		fmt.Println("Next steps:")
 		fmt.Println("  1. Add bear.artifact.yml to your services/apps")
 		fmt.Println("  2. Add bear.lib.yml to your libraries")
-		fmt.Println("  3. Run 'bear check' to validate your setup")
-		fmt.Println("  4. Run 'bear plan <environment>' to validate and plan deployments (dev, int, or prd)")
+		fmt.Println("  3. Run 'bear doctor' to check your setup")
+		fmt.Printf("  4. Run 'bear plan <environment>' to plan deployments (%s)\n", strings.Join(initEnvironments, ", "))
 		fmt.Println("  5. Run 'bear apply' to execute the plan")
 
 		return nil
 	},
 }
 
-func generateConfig(name string, languages, targets []string) ([]byte, error) {
+func generateConfig(name string, environments, languages, targets []string) ([]byte, error) {
 	var sb strings.Builder
-	cfg := config.Config{Name: name}
+	cfg := config.Config{Name: name, Environments: environments}
 	if len(languages) > 0 || len(targets) > 0 {
 		cfg.Use = config.UseConfig{Revision: internal.DefaultPresetsRevision, Languages: languages, Targets: targets}
 	}
@@ -171,6 +192,7 @@ func generateConfig(name string, languages, targets []string) ([]byte, error) {
 func init() {
 	initCmd.Flags().StringSliceVar(&initLanguages, "lang", nil, "Language presets to use (go,node,python,rust,java,typescript)")
 	initCmd.Flags().StringSliceVar(&initTargets, "target", nil, "Target presets to use (docker,cloudrun,lambda,s3,kubernetes,...)")
+	initCmd.Flags().StringSliceVar(&initEnvironments, "environments", defaultInitEnvironments, "Deployment environments to declare in bear.config.yml (comma-separated)")
 	initCmd.Flags().BoolVar(&initForce, "force", false, "Overwrite existing config")
 	rootCmd.AddCommand(initCmd)
 }

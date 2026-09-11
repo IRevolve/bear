@@ -21,7 +21,8 @@ var applyCmd = &cobra.Command{
 	Args:  cobra.NoArgs,
 	Short: "Execute the deployment plan",
 	Long: `Reads the plan from .bear/plan.yml (created by 'bear plan <environment>') and
-executes the deployments in parallel.
+executes the deployments in parallel. For every deploying artifact, apply
+first runs the language's build steps, then the target's deploy steps.
 
 After successful deployment, the lock file is updated and automatically
 committed with [skip ci]. Use --no-commit to disable auto-commit.
@@ -29,7 +30,11 @@ committed with [skip ci]. Use --no-commit to disable auto-commit.
 Completed deployments are checkpointed. Failed runs retain the plan for recovery.
 The plan file is removed only after successful execution and state publication.
 
-Requires a plan file — run 'bear plan <environment>' first (dev, int, or prd).
+Apply never rereads bear.config.yml to decide where to deploy: the saved plan is
+the approved snapshot, so renaming or retiring an environment does not
+invalidate an approved plan.
+
+Requires a plan file — run 'bear plan <environment>' first.
 
 Examples:
   bear plan dev && bear apply      # Plan and apply
@@ -52,7 +57,6 @@ Examples:
 			Context:     c.Context(),
 			GitRemote:   applyGitRemote,
 			GitBranch:   applyGitBranch,
-			Force:       force,
 			NoCommit:    applyNoCommit,
 			Concurrency: applyConcurrency,
 			Verbose:     verbose,

@@ -2,8 +2,36 @@
 
 Inspired by Terraform:
 
-1. **`bear plan dev`** — Detects changes, validates in parallel, writes `.bear/plan.yml`
-2. **`bear apply`** — Reads the plan, deploys in parallel, updates lock file
+1. **`bear plan dev`** — Detects changes by comparing against `bear.lock.yml`,
+   writes `.bear/plan.yml`. Runs no commands.
+2. **`bear apply`** — Reads the plan; for every deploying artifact, runs the
+   language's build steps then the target's deploy steps, in parallel across
+   artifacts; updates lock file.
+
+Plan is a pure decision. It never runs a language's or a target's steps, for a
+normal plan or a `--pin` plan, so it is fast and safe to run as often as you like
+— it never risks executing untrusted build or deploy commands just to show a
+diff. Apply is the only command that executes anything, and it now does the whole
+job for a deploying artifact in one place: build **and** deploy, back to back,
+every time, whether or not the deployment is pinned.
+
+### What Runs Where
+
+| Command | Language steps (`languages.<lang>.steps`) | Target steps (deploy) |
+|---------|---------------------------------------------|------------------------|
+| `bear plan` (normal or `--pin`) | Never | Never |
+| `bear apply` | For every deploying artifact, always first | For every deploying artifact, always second |
+| `bear validate` | For every selected artifact/library, on demand | Never (validate has no target/deployment concept) |
+
+Because plan never builds anything, it does not prove the code builds or passes
+tests — it is a diff/preview of what would deploy, not a promise that it can.
+[`bear validate`](../commands/validate.md) is where that assurance lives: it runs
+the same `languages.<lang>.steps` apply's build phase runs, with no environment,
+no change detection, no plan file and no Git, so a shallow pull-request checkout
+with no deployment credentials is enough. Run it in the merge request for fast
+feedback, and again — implicitly, as apply's first phase — right before every
+deployment. The full recommended chain is
+`doctor` → `validate` → `plan` → `apply`.
 
 The plan file is an approval checkpoint, not a portable authorization to deploy
 arbitrary source. Apply it only against the intended source and state. Failed runs
@@ -12,77 +40,119 @@ retain the plan and completed checkpoints for recovery; see [Retries](#retries).
 After successful CLI argument parsing and acquiring the workspace lock, planning
 removes the previous plan, including when the new
 attempt fails or has no changes. A stale deployment plan cannot survive a rejected
-environment, invalid configuration, or failed validation.
+environment or invalid configuration.
 CLI syntax errors, including a missing environment argument (`bear plan`), leave the
-previous plan untouched. A provided invalid environment (such as `bear plan qa`)
+previous plan untouched. A rejected environment — malformed, or well-formed but not
+declared, such as `bear plan qa` in a project declaring `dev`, `int`, `prd` —
 starts planning and clears the stale plan before failing. Only apply after a successful plan.
 
 Artifacts declare an allowlist such as `environments: [dev, int]` to permit deployment
-only in those environments. An absent allowlist or `[]` means no deployment, with
-validation retained. Use `[dev, int, prd]` to allow all three environments.
+only in those environments. An absent allowlist or `[]` means no deployment; change
+detection and dependency propagation still run. Repeat the project's whole list to
+allow all of them.
 
-Every plan requires an explicit `bear plan dev`, `bear plan int`, or `bear plan prd`,
-including validation-only plans and plans selecting unchanged or pinned artifacts.
-Artifact filters follow the environment, as in `bear plan dev user-api`.
-Only the positional environment argument selects policy; inherited or configured
-`ENVIRONMENT` variables cannot satisfy this requirement.
-Deployment is gated after dependency propagation; validation and dependent change
-detection remain active. Each dependent uses its own allowlist. Pinning and forcing
-cannot bypass it.
+Both the plan argument and every allowlist entry are checked against the
+environments the project
+[declares in `bear.config.yml`](../configuration.md#deployment-environments). There
+is no fixed set: `[dev, int, prd]` is what `bear init` writes by default, and
+`[preprd, prd]` or a single `[prd]` is equally valid. An undeclared plan argument
+fails with `unknown environment "production": bear.config.yml declares dev, int,
+prd`, and an undeclared allowlist entry fails with `artifact "api" allows undeclared
+environment "preprd"; bear.config.yml declares dev, int, prd`. Declaration order is
+preserved in those messages and everywhere else, and means nothing beyond ordering:
+Bear does not require `int` before `prd`.
+
+Every plan requires an explicit environment as its first positional argument, as in
+`bear plan dev` or `bear plan preprd`,
+including a plan that ends up with nothing to deploy and one selecting unchanged or
+pinned artifacts. Artifact filters follow the environment, as in `bear plan dev
+user-api`. Only the positional environment argument selects policy; inherited or
+configured `ENVIRONMENT` variables cannot satisfy this requirement.
+Deployment is gated after dependency propagation; change detection and dependent
+propagation remain active regardless. Each dependent uses its own allowlist.
+Pinning and forcing cannot bypass it.
 
 The environment, allowlists, and policy decisions are snapshotted in the saved plan
 and printed by `bear plan`, including skip reasons. Apply executes that snapshot
-without re-evaluating policy, so changes
-to policy or the intended environment require replanning. Disabled deployments are not
+without re-evaluating policy — it never reads `bear.config.yml` at all — so
+changes
+to policy or the intended environment require replanning, while no change to the
+project's declared environments can make apply reject an approved plan on policy
+grounds.
+Disabled deployments are not
 executed or recorded in the lock file.
 Old deployment plans lacking allowlist snapshots, source commit, or fingerprint
 must be regenerated before apply.
 
-The selected environment is injected as `$ENVIRONMENT` into all validation and deployment
-steps, including validation-only plans, overriding configured or inherited values.
+That is a statement about policy, not about files. `bear.config.yml` is ordinary
+tracked source: editing it in the approved checkout changes the
+[source fingerprint](#source-safety) and apply refuses the plan, exactly as it would
+for any other edited file. Apply an in-flight plan before changing configuration, or
+replan afterwards.
+
+The selected environment is injected as `$ENVIRONMENT` into every step apply will
+later run for a deploying artifact, overriding configured or inherited values.
+Plan itself runs no steps, so nothing consumes the variable at plan time; it is
+saved in the plan so apply's build and deploy steps see the approved selection.
 Its saved deployment value takes precedence over the process environment
 when applying the plan.
 
 ## Source Safety
 
-A normal plan with any permitted deployments requires clean Git source **before
-validation**, across the entire repository, not just selected artifacts or the
-project subdirectory. Commit or remove tracked/index and nonignored untracked
-changes first. Validation-only normal plans may start dirty. Bear state
+A normal plan with any permitted deployments requires clean Git source before it
+runs, across the entire repository, not just selected artifacts or the project
+subdirectory. Commit or remove tracked/index and nonignored untracked changes
+first. A plan with nothing to deploy may start dirty. Bear state
 (`bear.lock.yml` and `.bear/` at any repository depth) is excluded from source checks.
 
-Validation must leave HEAD and the tracked working-tree diff against HEAD
-unchanged, including for validation-only plans. Generated nonignored untracked
-files are allowed. After validation, Bear saves the full commit and a fingerprint
-of tracked and nonignored untracked working files across the repository, including
-file names, contents, executable modes, symlink targets, and tracked deletions.
-Absolute checkout paths and timestamps are not part of that fingerprint.
+Plan itself never modifies HEAD or the tracked working-tree diff — it runs no
+commands at all — so its fingerprint is simply of the source as it already sits on
+disk. Bear saves the full commit and a fingerprint of tracked and nonignored
+untracked working files across the repository, including file names, contents,
+executable modes, symlink targets, and tracked deletions. Absolute checkout paths
+and timestamps are not part of that fingerprint.
 
-Before running pending deployments, normal apply requires both HEAD and the
-post-validation fingerprint to match. It does not rerun normal validation steps.
-Keep the validated workspace, or reproduce its fingerprinted generated files when
-moving the plan to another checkout. Ignored untracked files such as dependencies
-and build outputs are **not** fingerprinted; preserve or reproducibly rebuild them
-if your deployment needs them. Bear does not guarantee their immutability.
+Before running pending deployments, apply requires both HEAD and the saved
+fingerprint to match — for a normal plan, against the caller's checkout; for a
+pinned plan, against a fresh private worktree at the saved commit (see
+[Pinned Source](#pinned-source) below). This is the only assurance that what
+apply is about to build is the source that was approved: unlike the old
+plan-then-apply split, apply never assumes plan already ran build steps whose
+output needs to survive until now, because apply always builds fresh, itself,
+immediately before it deploys. Moving a plan to another checkout therefore only
+requires that checkout's tracked commit and nonignored untracked files to match
+exactly — a plain clean checkout of the same commit satisfies this trivially —
+not that it already contain generated build artifacts. Ignored untracked files
+such as dependencies and prior build outputs are **not** fingerprinted regardless;
+provision them the same way you would for any fresh build.
 
-Saved artifact and validation paths are project-relative. Apply rejects absolute
+Saved artifact paths are project-relative. Apply rejects absolute
 paths, traversal, and existing symlinks escaping the source root. Nested project
 locations, such as `examples/`, are preserved in private pinned worktrees.
 
 ### Pinned Source
 
-`--pin` resolves the revision to a commit and validates it in a private detached
-worktree. Artifact selection, policy, and step definitions come from the current
-project configuration and are snapshotted; the selected revision supplies source.
+`--pin` resolves the revision to a commit and takes its fingerprint in a private
+detached worktree — it does not build, test, or otherwise validate that revision.
+Artifact selection, policy, and step definitions come from the current project
+configuration and are snapshotted; the selected revision supplies only source.
 Dirty files, ignored dependencies, and outputs from the caller's checkout are not
 copied into that worktree.
 
 When pinned deployments remain pending, apply creates a fresh private worktree at
-the saved commit and reruns the saved validation/setup steps to rebuild their
-outputs. It checks the resulting commit and fingerprint against the approved plan
-before deployment. Nondeterministic nonignored outputs cause a mismatch. Ignored
-dependencies/outputs remain outside the fingerprint contract even when rebuilt.
-Private worktrees are cleaned up after use; cleanup failures are reported.
+the saved commit and checks its commit and fingerprint against the approved plan
+**before** running any step. Only then does it run the language's build steps and
+the target's deploy steps, exactly as it would for a normal deployment — pinning
+changes where the source comes from, not what runs against it, and there is no
+separate "replay validation" phase to keep in sync with normal apply's behavior
+anymore. Because the fingerprint check happens against the fresh worktree before
+any step runs, ignored dependencies and outputs the build steps later produce are
+never part of it either way. Private worktrees are cleaned up after use; cleanup
+failures are reported.
+
+A pipeline that exposes `--pin` and `--force` as build parameters to freeze and
+unfreeze deployables on demand is a CI-side pattern built from these two flags,
+not a separate Bear feature; see [Freeze & Unfreeze (Jenkins)](freeze-unfreeze.md).
 
 ### Limits
 
@@ -99,6 +169,13 @@ dependencies, toolchains, or deployment side effects.
 History and pins are scoped as `environments -> environment -> artifact`. Deploying
 to `dev` does not mark that source deployed in `prd`. Dependency changes are compared
 against each consumer's deployed baseline in the selected environment.
+
+The keys are whatever environments have been deployed to, which is not necessarily
+what the project declares today. History under a retired name is kept and is neither
+an error nor a warning; `bear list` and `bear list --tree` report only the declared
+set, so retiring an environment hides its history from those views without deleting
+it. `bear apply` still writes history under the environment its plan approved,
+declared or not.
 
 Legacy top-level `artifacts` entries are retained with a warning, but have no
 environment provenance and are not used or automatically migrated into environment
@@ -131,8 +208,11 @@ then checkpoints `completed: true` in the plan. These writes happen per completi
 not only after the whole batch succeeds. Failed runs retain the plan. On retry,
 completed entries are skipped only if lock history matches the expected commit,
 target, pin status, short version, and has a timestamp; a mismatch stops apply.
-Remaining deployments still require the approved source checks. A fully completed
-retry runs no validation or deployment commands and only finishes state publication.
+Remaining deployments still require the approved source checks, and still run
+their full build-then-deploy step sequence from scratch: apply checkpoints
+per-artifact completion, not per-step progress within an artifact. A fully
+completed retry runs no build, deploy, or source-preparation commands and only
+finishes state publication.
 
 Git commit/push failures return a nonzero error and retain the completed plan and
 history. `--git-remote` and `--git-branch` select the push destination, including
@@ -156,25 +236,34 @@ Bear cannot promise exactly-once deployment or roll back external effects.
 
 The two commands print deliberately different things. **The plan is the review
 artifact; apply is the execution log.** Plan states, once, everything a reviewer
-needs to approve. Apply then reports what it actually did, and what failed, without
+needs to approve — computed instantly, since it ran nothing to get there. Apply
+then reports what it actually built and deployed, and what failed, without
 restating the approved plan back at you.
 
-`bear plan` closes with the rule, an aligned fact block, its counted sections, and
-one sentence:
+`bear plan` goes straight from its branding header to the rule, an aligned fact
+block, its counted sections, and one sentence — there is no progress phase in
+between, because plan runs no commands:
 
 ```text
+Bear Plan
+─────────
+
 ────────────────────────────────────────
 Environment: prd
-Commit:      b11f03a
+Commit:      0621256
+Changes:     1 file
 
-deploy (2):
-  - checkout-api (services/checkout-api): new artifact
-  - kira-teams-adapter (services/kira/teams-adapter): new artifact
+deploy (1):
+  - api (services/api): dependency 'shared' changed
+
+changed (2):
+  - shared (libs/shared): new artifact
+  - worker (services/worker): new artifact
 
 skip (1):
-  - kira-mail-adapter (services/kira/mail-adapter): deployment not enabled for environment prd
+  - worker (services/worker): deployment not enabled for environment prd
 
-Plan complete: 4 validated, 2 to deploy, 1 skipped
+Plan complete: 3 changed, 1 to deploy, 1 skipped
 ```
 
 The facts are `Environment:` always, `Commit:` with the short source commit —
@@ -182,43 +271,70 @@ The facts are `Environment:` always, `Commit:` with the short source commit —
 filter and `Changes:` for the number of changed files. Every entry shares that one
 source, so it is reported once in the header instead of under each artifact. Each
 section is labelled with its outcome and entry count, its entries are sorted by
-name so two runs of the same plan produce comparable summaries even though jobs
-finish in any order, and each entry is a single line:
-`  - <name> (<path>): <reason>`. The path is omitted when the plan recorded none,
-and empty sections are omitted.
+name so two runs of the same plan produce comparable summaries, and each entry is
+a single line: `  - <name> (<path>): <reason>`. The path is omitted when the plan
+recorded none, and empty sections are omitted.
 
-`bear apply` prints the phase heading, the job lines, and the closing sentence. A
-successful run has no rule, no `Environment:` block, and no `deploy`/`skip`
-sections:
+Three sections, not two: `deploy` lists what apply will run; `changed` is
+informational only, never persisted, and lists artifacts or libraries whose
+source changed but that have nothing to deploy — typically a library, since
+libraries are never deployable; `skip` lists a would-be deployment that did not
+happen, and why.
+
+`bear apply` prints its own branding header, then the phase heading, the job
+lines, and the closing sentence. A successful run has no rule, no `Environment:`
+block, and no `deploy`/`changed`/`skip` sections:
 
 ```text
-Deploying 2 artifacts to prd
+Bear Apply
+──────────
 
-  checkout-api:       Deploying...
-  checkout-api:       Deployment complete after 15s
-  kira-teams-adapter: Deployment complete after 15s
+Deploying 1 artifact to prd
 
-Apply complete: 2 deployed, 1 skipped in 15s
+  api: Deploying...
+  api: Deploying... [1/4 Test]
+  api: Deploying... [2/4 Build]
+  api: Deploying... [3/4 Build image]
+  api: Deploying... [4/4 Push image]
+  api: Deployment complete after 0s
+
+Apply complete: 1 deployed, 1 skipped in 0s
 ```
 
 The environment is named in the phase heading, so it is still stated once, beside
-the work. On failure apply prints the rule, `Environment: <env>`, and a red
-`failed (N):` list whose entries use the failing step's error as their reason —
-the one part of a summary a deployment log genuinely needs, kept unburied because
-nothing else is recapped around it. Artifacts checkpointed by an earlier run are
-not redeployed and are not listed; they only raise the `skipped` count.
+the work. `api`'s step counter runs `[1/4]` through `[4/4]` because its language
+defines two steps and its target defines two more: apply numbers the language's
+build steps and the target's deploy steps as one continuous sequence per
+artifact, build first, for every deployment — pinned or not, there is exactly one
+execution path. On failure apply prints the rule, `Environment: <env>`, and a red
+`failed (N):` list whose entries use the failing step's error as their reason,
+whether that step was a build step or a deploy step:
+
+```text
+────────────────────────────────────────
+Environment: prd
+
+failed (1):
+  - api (services/api): Test: exit status 1
+
+Apply failed: 0 deployed, 1 failed, 1 skipped in 0s
+```
+
+That is the one part of a summary a deployment log genuinely needs, kept unburied
+because nothing else is recapped around it. Artifacts checkpointed by an earlier
+run are not redeployed and are not listed; they only raise the `skipped` count.
 `bear.lock.yml` and the retained plan remain the record of what is deployed.
 
 One sentence closes each command, so a long CI log can be read from the bottom up:
-`Plan complete: 4 validated, 2 to deploy, 1 skipped` for plan, and
-`Apply complete: 2 deployed, 1 skipped in 15s` — or
-`Apply failed: 0 deployed, 2 failed, 1 skipped in 11s` — for apply. Plan's
-validation phase closes the same way, with `Validation complete: 4 artifacts in 3s`.
-A publishing apply adds a dimmed `Lock file committed with [skip ci]` line after
-its sentence.
+`Plan complete: 3 changed, 1 to deploy, 1 skipped` for plan, and
+`Apply complete: 1 deployed, 1 skipped in 0s` — or
+`Apply failed: 0 deployed, 1 failed, 1 skipped in 0s` — for apply. Plan's `changed`
+count is not "validated": it is however many artifacts and libraries a source
+change affected, whether or not they ended up in `deploy`. A publishing apply adds
+a dimmed `Lock file committed with [skip ci]` line after its sentence.
 
 Progress is reported while the work runs, under a plain phase heading such as
-`Deploying 2 artifacts to prd`. On an interactive terminal Bear draws an animated
+`Deploying 1 artifact to prd`. On an interactive terminal Bear draws an animated
 progress bar with a per-task spinner and timers. Without a terminal it prints one
 plain line per job on every status change, with job names padded into a common
 column, a `Still ...` line every 10 seconds for each running job, and the

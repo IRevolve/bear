@@ -45,7 +45,7 @@ type progressVerbs struct {
 var progressOperations = map[string]progressVerbs{
 	"deploy":   {"Deploying", "Still deploying", "Deployment complete", "Deployment failed"},
 	"validate": {"Validating", "Still validating", "Validation complete", "Validation failed"},
-	"check":    {"Checking", "Still checking", "Check complete", "Check failed"},
+	"doctor":   {"Checking", "Still checking", "Check complete", "Check failed"},
 }
 
 var defaultVerbs = progressVerbs{"Running", "Still running", "Complete", "Failed"}
@@ -108,7 +108,7 @@ func NewProgressTracker(p *Printer, taskNames []string) *ProgressTracker {
 }
 
 // SetOperation selects the verbs used for status lines ("deploy", "validate",
-// or "check"). Call before Start.
+// or "doctor"). Call before Start.
 func (pt *ProgressTracker) SetOperation(kind string) {
 	pt.mu.Lock()
 	defer pt.mu.Unlock()

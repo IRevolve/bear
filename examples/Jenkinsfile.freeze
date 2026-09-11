@@ -1,0 +1,157 @@
+// Parameterized freeze/unfreeze deployment pipeline. REF pins one or all
+// deployables in ENVIRONMENT to a fixed commit ('bear plan --pin'); FORCE=true
+// with an explicit DEPLOYABLE unfreezes exactly that one and redeploys HEAD
+// ('bear plan --force'). This is a CI-side pattern built from existing Bear
+// flags, not a dedicated Bear "freeze" feature. See
+// docs/concepts/freeze-unfreeze.md for the full explanation and
+// examples/README.md for agent provisioning (Go 1.25+, target CLIs/credentials).
+// Run this as a separate, manually-triggered ("Build with Parameters") pipeline
+// job from the commit-triggered examples/Jenkinsfile, not as its replacement.
+pipeline {
+    agent any
+    options {
+        timestamps()
+        disableConcurrentBuilds()
+    }
+    parameters {
+        string(
+            name: 'ENVIRONMENT',
+            defaultValue: '',
+            description: 'Environment declared in bear.config.yml (e.g. dev, int, prd for this example project). Required; Bear rejects an undeclared value.'
+        )
+        string(
+            name: 'DEPLOYABLE',
+            defaultValue: '',
+            description: 'Artifact name from "bear list". Empty means every eligible artifact. Required when FORCE is true (unfreeze targets exactly one deployable).'
+        )
+        string(
+            name: 'REF',
+            defaultValue: '',
+            description: 'Git SHA, tag, or branch to freeze DEPLOYABLE (or all deployables) to. Leave empty to deploy latest, or to unfreeze with FORCE.'
+        )
+        booleanParam(
+            name: 'FORCE',
+            defaultValue: false,
+            description: 'Unfreeze: deploy current HEAD for DEPLOYABLE and clear its pin. Requires a non-empty DEPLOYABLE and an empty REF.'
+        )
+    }
+    environment {
+        GIT_AUTHOR_NAME = 'Bear CI'
+        GIT_AUTHOR_EMAIL = 'bear-ci@example.com'
+        GIT_COMMITTER_NAME = 'Bear CI'
+        GIT_COMMITTER_EMAIL = 'bear-ci@example.com'
+        ENVIRONMENT = "${params.ENVIRONMENT}"
+        DEPLOYABLE = "${params.DEPLOYABLE}"
+        REF = "${params.REF}"
+    }
+    stages {
+        // Bear's --force has no built-in single-artifact restriction: without an
+        // artifact filter it affects every artifact in the selection. A pipeline
+        // that means "unfreeze exactly one deployable" must enforce that itself,
+        // before Bear ever runs.
+        stage('Guard') {
+            steps {
+                script {
+                    if (!params.ENVIRONMENT?.trim()) {
+                        error 'ENVIRONMENT is required (an environment declared in bear.config.yml).'
+                    }
+                    if (params.FORCE && !params.DEPLOYABLE?.trim()) {
+                        error 'FORCE=true requires an explicit DEPLOYABLE; refusing to force-unfreeze every artifact in the selection.'
+                    }
+                    if (params.FORCE && params.REF?.trim()) {
+                        error 'REF and FORCE=true are mutually exclusive: freeze (REF) and unfreeze (FORCE) are separate runs.'
+                    }
+                }
+            }
+        }
+        stage('Install') {
+            steps {
+                // Install a reviewed release outside the checkout, not a moving latest.
+                sh '''
+                    set -eu
+                    test -n "$BEAR_VERSION"
+                    case "$BEAR_VERSION" in v[0-9]*) ;; *) exit 1 ;; esac
+                    install_dir=$(mktemp -d)
+                    trap 'rm -rf "$install_dir"' EXIT
+                    git clone --branch "$BEAR_VERSION" --depth 1 https://github.com/irevolve/bear.git "$install_dir/bear"
+                    go -C "$install_dir/bear" install -ldflags="-X github.com/irevolve/bear/commands.Version=${BEAR_VERSION#v}" .
+                '''
+            }
+        }
+        // Bear resolves --pin only against the local Git object database; it does
+        // not fetch remote refs itself. A tag or branch created or moved on the
+        // remote since the last checkout is invisible to --pin until fetched.
+        stage('Fetch REF') {
+            when { expression { params.REF?.trim() } }
+            steps {
+                sh '''
+                    set -eu
+                    git fetch origin --tags --force -- "$REF"
+                '''
+            }
+        }
+        stage('Plan') {
+            steps {
+                dir('examples') {
+                    script {
+                        if (params.REF?.trim()) {
+                            // Freeze DEPLOYABLE (or, if empty, every eligible
+                            // artifact) to REF in ENVIRONMENT. Works whether REF
+                            // is older or newer than HEAD.
+                            sh '''
+                                set -eu
+                                bear plan "$ENVIRONMENT" $DEPLOYABLE --pin "$REF"
+                            '''
+                        } else if (params.FORCE) {
+                            // Unfreeze: deploy HEAD for exactly DEPLOYABLE and
+                            // clear its pin. The Guard stage already required a
+                            // non-empty DEPLOYABLE.
+                            sh '''
+                                set -eu
+                                bear plan "$ENVIRONMENT" $DEPLOYABLE --force
+                            '''
+                        } else {
+                            // Deploy latest for everything not currently frozen.
+                            // Artifacts pinned in ENVIRONMENT are skipped
+                            // automatically with reason
+                            // "pinned (use --force to override)".
+                            sh '''
+                                set -eu
+                                bear plan "$ENVIRONMENT" $DEPLOYABLE
+                            '''
+                        }
+                    }
+                }
+            }
+        }
+        stage('Deploy') {
+            when {
+                allOf {
+                    branch 'main'
+                    not { changeRequest() }
+                }
+            }
+            steps {
+                // Git plugin's askpass binding: no token in origin or persisted config.
+                withCredentials([gitUsernamePassword(
+                    credentialsId: 'git-credentials', gitToolName: 'Default'
+                )]) {
+                    dir('examples') {
+                        sh '''
+                            set -eu
+                            test -z "${CHANGE_ID:-}"
+                            test "$BRANCH_NAME" = main
+                            git check-ref-format --branch "$BRANCH_NAME" >/dev/null
+                            bear apply --git-remote origin --git-branch "$BRANCH_NAME"
+                        '''
+                    }
+                }
+            }
+        }
+    }
+    post {
+        failure { echo 'Bear failed; inspect deployment and Git state before retrying.' }
+        // Preserve failed deployment/Git state for operator recovery.
+        success { cleanWs() }
+    }
+}
