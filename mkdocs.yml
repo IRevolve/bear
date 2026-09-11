@@ -37,6 +37,7 @@ nav:
   - Getting Started: getting-started.md
   - Upgrade to v4: migration-v4.md
   - Releases:
+      - v4.1.0: releases/v4.1.0.md
       - v4.0.0: releases/v4.0.0.md
   - Configuration: configuration.md
   - CI/CD: ci-cd.md

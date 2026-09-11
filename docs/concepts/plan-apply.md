@@ -30,8 +30,9 @@ Deployment is gated after dependency propagation; validation and dependent chang
 detection remain active. Each dependent uses its own allowlist. Pinning and forcing
 cannot bypass it.
 
-The environment, allowlists, and policy decisions are snapshotted in the saved plan and displayed by
-plan/apply, including skip reasons. Apply does not re-evaluate policy, so changes
+The environment, allowlists, and policy decisions are snapshotted in the saved plan
+and printed by `bear plan`, including skip reasons. Apply executes that snapshot
+without re-evaluating policy, so changes
 to policy or the intended environment require replanning. Disabled deployments are not
 executed or recorded in the lock file.
 Old deployment plans lacking allowlist snapshots, source commit, or fingerprint
@@ -153,6 +154,79 @@ Bear cannot promise exactly-once deployment or roll back external effects.
 
 ## Output
 
-`--verbose` streams subprocess output while retaining bounded failure diagnostics.
-Without it, step output is captured and failure tails are reported. Output can
-contain secrets; bounded retention is not redaction.
+The two commands print deliberately different things. **The plan is the review
+artifact; apply is the execution log.** Plan states, once, everything a reviewer
+needs to approve. Apply then reports what it actually did, and what failed, without
+restating the approved plan back at you.
+
+`bear plan` closes with the rule, an aligned fact block, its counted sections, and
+one sentence:
+
+```text
+────────────────────────────────────────
+Environment: prd
+Commit:      b11f03a
+
+deploy (2):
+  - checkout-api (services/checkout-api): new artifact
+  - kira-teams-adapter (services/kira/teams-adapter): new artifact
+
+skip (1):
+  - kira-mail-adapter (services/kira/mail-adapter): deployment not enabled for environment prd
+
+Plan complete: 4 validated, 2 to deploy, 1 skipped
+```
+
+The facts are `Environment:` always, `Commit:` with the short source commit —
+`Pinned:` instead when the plan was pinned — then `Artifacts:` for an artifact
+filter and `Changes:` for the number of changed files. Every entry shares that one
+source, so it is reported once in the header instead of under each artifact. Each
+section is labelled with its outcome and entry count, its entries are sorted by
+name so two runs of the same plan produce comparable summaries even though jobs
+finish in any order, and each entry is a single line:
+`  - <name> (<path>): <reason>`. The path is omitted when the plan recorded none,
+and empty sections are omitted.
+
+`bear apply` prints the phase heading, the job lines, and the closing sentence. A
+successful run has no rule, no `Environment:` block, and no `deploy`/`skip`
+sections:
+
+```text
+Deploying 2 artifacts to prd
+
+  checkout-api:       Deploying...
+  checkout-api:       Deployment complete after 15s
+  kira-teams-adapter: Deployment complete after 15s
+
+Apply complete: 2 deployed, 1 skipped in 15s
+```
+
+The environment is named in the phase heading, so it is still stated once, beside
+the work. On failure apply prints the rule, `Environment: <env>`, and a red
+`failed (N):` list whose entries use the failing step's error as their reason —
+the one part of a summary a deployment log genuinely needs, kept unburied because
+nothing else is recapped around it. Artifacts checkpointed by an earlier run are
+not redeployed and are not listed; they only raise the `skipped` count.
+`bear.lock.yml` and the retained plan remain the record of what is deployed.
+
+One sentence closes each command, so a long CI log can be read from the bottom up:
+`Plan complete: 4 validated, 2 to deploy, 1 skipped` for plan, and
+`Apply complete: 2 deployed, 1 skipped in 15s` — or
+`Apply failed: 0 deployed, 2 failed, 1 skipped in 11s` — for apply. Plan's
+validation phase closes the same way, with `Validation complete: 4 artifacts in 3s`.
+A publishing apply adds a dimmed `Lock file committed with [skip ci]` line after
+its sentence.
+
+Progress is reported while the work runs, under a plain phase heading such as
+`Deploying 2 artifacts to prd`. On an interactive terminal Bear draws an animated
+progress bar with a per-task spinner and timers. Without a terminal it prints one
+plain line per job on every status change, with job names padded into a common
+column, a `Still ...` line every 10 seconds for each running job, and the
+remaining backlog appended to the last running job's heartbeat as
+`(1 job queued)`. Captured failure output is indented four spaces under the job
+line that reported it. See [Live Output](../ci-cd.md#live-output).
+
+`--verbose` streams subprocess output while retaining bounded failure diagnostics,
+and selects the plain, line-per-status display even on a terminal. Without it,
+step output is captured and failure tails are reported. Output can contain secrets;
+bounded retention is not redaction.

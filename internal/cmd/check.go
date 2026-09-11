@@ -42,7 +42,9 @@ func Check(configPath string) error {
 		"Checking for cycles",
 	}
 
-	pt := NewProgressTracker(p, "Validating configuration", checkSteps)
+	p.PhaseHeader("Validating configuration")
+	pt := NewProgressTracker(p, checkSteps)
+	pt.SetOperation("check")
 	pt.Start()
 
 	// 1. Load config

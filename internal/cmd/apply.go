@@ -44,14 +44,10 @@ func ApplyWithOptions(configPath string, opts Options) (retErr error) {
 	if err != nil {
 		return fmt.Errorf("error reading plan file: %w", err)
 	}
-	if planFile.Environment != "" {
-		p.Printf("Environment: %s\n", planFile.Environment)
-	}
-	for _, s := range planFile.Skipped {
-		p.Printf("  Skipped %s: %s\n", s.Name, s.Reason)
-	}
+	// The environment and every skip are reported in the final summary; keep the
+	// start of the log free for the jobs themselves.
 	if len(planFile.Artifacts) == 0 {
-		p.Println("Plan contains no artifacts to deploy.")
+		p.Printf("Plan for %s contains no artifacts to deploy.\n", planFile.Environment)
 		return config.RemovePlan(rootPath)
 	}
 
@@ -144,10 +140,10 @@ func ApplyWithOptions(configPath string, opts Options) (retErr error) {
 		}
 	}
 
-	runSteps := func(ctx context.Context, pt *ProgressTracker, i int, phase, path string, vars map[string]string, steps []config.Step) error {
+	runSteps := func(ctx context.Context, pt *ProgressTracker, i int, path string, vars map[string]string, steps []config.Step) error {
 		pt.MarkRunning(i)
 		for stepIndex, step := range steps {
-			pt.MarkStep(i, fmt.Sprintf("%s / %s (%d/%d)", phase, step.Name, stepIndex+1, len(steps)))
+			pt.MarkStep(i, step.Name, stepIndex+1, len(steps))
 			var tail TailBuffer
 			var output io.Writer = &tail
 			if opts.Verbose {
@@ -176,14 +172,16 @@ func ApplyWithOptions(configPath string, opts Options) (retErr error) {
 		for i, validation := range planFile.Validations {
 			names[i] = validation.Name
 		}
-		pt := NewProgressTracker(p, fmt.Sprintf("Validating %d artifact(s)", len(names)), names)
+		p.PhaseHeader("Validating " + plural(len(names), "artifact", "artifacts"))
+		pt := NewProgressTracker(p, names)
+		pt.SetOperation("validate")
 		if opts.Verbose {
 			pt.UsePlainOutput()
 		}
 		pt.Start()
 		errs := RunParallel(ctx, opts.Concurrency, len(names), func(ctx context.Context, i int) error {
 			v := planFile.Validations[i]
-			if err := runSteps(ctx, pt, i, "validate", v.Path, v.Vars, v.Steps); err != nil {
+			if err := runSteps(ctx, pt, i, v.Path, v.Vars, v.Steps); err != nil {
 				return err
 			}
 			pt.MarkDone(i)
@@ -198,7 +196,7 @@ func ApplyWithOptions(configPath string, opts Options) (retErr error) {
 		if err := errors.Join(errs...); err != nil {
 			return fmt.Errorf("pinned validation failed; plan retained: %w", err)
 		}
-		p.Summary(p.SummaryValidated(len(names)), p.dim("total "+formatDuration(pt.TotalElapsed())))
+		printResult(p, p.green, "Validation complete", []string{plural(len(names), "artifact", "artifacts")}, pt.TotalElapsed())
 	}
 	// Fully checkpointed retries run no source commands. They only publish history;
 	// the Git helper still refuses unrelated commits or an out-of-sync remote.
@@ -220,10 +218,11 @@ func ApplyWithOptions(configPath string, opts Options) (retErr error) {
 
 	names := make([]string, len(pending))
 	for i, index := range pending {
-		a := planFile.Artifacts[index]
-		names[i] = fmt.Sprintf("%s -> %s", a.Name, a.Target)
+		names[i] = planFile.Artifacts[index].Name
 	}
-	pt := NewProgressTracker(p, fmt.Sprintf("Deploying %d artifact(s)", len(pending)), names)
+	p.PhaseHeader(fmt.Sprintf("Deploying %s to %s", plural(len(pending), "artifact", "artifacts"), planFile.Environment))
+	pt := NewProgressTracker(p, names)
+	pt.SetOperation("deploy")
 	if opts.Verbose {
 		pt.UsePlainOutput()
 	}
@@ -240,7 +239,7 @@ func ApplyWithOptions(configPath string, opts Options) (retErr error) {
 		mu.Lock()
 		artifact := planFile.Artifacts[index]
 		mu.Unlock()
-		if err := runSteps(ctx, pt, i, "deploy", artifact.Path, artifact.Vars, artifact.Steps); err != nil {
+		if err := runSteps(ctx, pt, i, artifact.Path, artifact.Vars, artifact.Steps); err != nil {
 			return err
 		}
 		mu.Lock()
@@ -291,14 +290,36 @@ func ApplyWithOptions(configPath string, opts Options) (retErr error) {
 		}
 	}
 	pt.Stop()
-	parts := []string{p.SummaryDeployed(deployed)}
+	// The approved plan already listed every deployment and skip. Apply only
+	// repeats what needs action now, so failures are not buried in a recap.
+	var failedEntries []summaryEntry
+	for i, index := range pending {
+		if checkpointed[i] || errs[i] == nil {
+			continue
+		}
+		entry := deployEntry(planFile.Artifacts[index])
+		entry.Reason = errs[i].Error()
+		failedEntries = append(failedEntries, entry)
+	}
+	skipped := len(planFile.Skipped) + len(planFile.Artifacts) - len(pending)
+	if len(failedEntries) > 0 {
+		p.Blank()
+		printEnvironmentSummary(p, summaryHeader{Environment: planFile.Environment},
+			summarySection{Label: "failed", Color: p.red, Entries: failedEntries},
+		)
+	}
+	counts := []string{plural(deployed, "deployed", "deployed")}
 	if len(failures) > 0 {
-		parts = append(parts, p.SummaryFailed(len(failures)))
+		counts = append(counts, plural(len(failures), "failed", "failed"))
 	}
-	if skipped := planFile.TotalSkips + len(planFile.Artifacts) - len(pending); skipped > 0 {
-		parts = append(parts, p.SummarySkipped(skipped))
+	if skipped > 0 {
+		counts = append(counts, plural(skipped, "skipped", "skipped"))
 	}
-	p.Summary(append(parts, p.dim("total "+formatDuration(pt.TotalElapsed())))...)
+	headline, color := "Apply complete", p.green
+	if len(failures) > 0 {
+		headline, color = "Apply failed", p.red
+	}
+	printResult(p, color, headline, counts, pt.TotalElapsed())
 	if err := errors.Join(errs...); err != nil {
 		return fmt.Errorf("deployment failed for %s; plan retained with completed checkpoints: %w", strings.Join(failures, ", "), err)
 	}

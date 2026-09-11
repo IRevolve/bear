@@ -256,10 +256,62 @@ state persistence explicitly, then retain the updated lock file durably.
 
 ## Live Output
 
-Non-terminal progress uses newline-delimited updates with step and elapsed time.
-Run Bear directly in Jenkins `sh`, without `returnStdout: true` or shell capture.
-No TTY or ANSI plugin is required. `--verbose` streams subprocess output while
-retaining bounded failure diagnostics. Without it, output is captured and failure
+Without a terminal — Jenkins `sh`, GitLab job logs, GitHub Actions — progress is
+Terraform-style: one plain line per job on every status change. There is no ASCII
+progress bar, spinner, cursor movement, or ANSI colour, so each line is appended
+once and stays readable in a scrollback log. Run Bear directly in the job's shell,
+without `returnStdout: true` or other capture. No TTY or ANSI plugin is required.
+
+```text
+Bear Apply
+──────────
+
+Deploying 2 artifacts to prd
+
+  checkout-api:       Deploying...
+  checkout-api:       Deploying... [1/3 Build image]
+  checkout-api:       Still deploying... [10s elapsed, 1/3 Build image] (1 job queued)
+  checkout-api:       Deploying... [2/3 Push image]
+  checkout-api:       Deploying... [3/3 Deploy revision]
+  checkout-api:       Deployment complete after 15s
+  kira-teams-adapter: Deploying...
+  kira-teams-adapter: Deploying... [1/3 Build image]
+  kira-teams-adapter: Deploying... [2/3 Push image]
+  kira-teams-adapter: Deployment failed after 11s: Push image: exit status 1
+    denied-missing-registry-credentials
+```
+
+Each command opens with its own branding header — `Bear Plan` or `Bear Apply` —
+and each phase is a plain bold heading. Apply's heading names its destination,
+`Deploying 2 artifacts to prd`, so the environment is stated once beside the work.
+Phases carry no banner rules, so the log reads as a single column of text.
+
+A job reports when it starts, when it enters a step, and when it finishes. Job
+names are padded to a common width, so the status text of every line starts in the
+same column. The bracketed detail is the current step, numbered `<n>/<total>` when
+the target or language defines more than one. Failure lines end with the error and
+are followed by the bounded output tail, indented four spaces under the job line
+that reported it.
+
+Every running job additionally repeats a `Still ...` line every 10 seconds with
+its total elapsed time and current step, so a silent long-running command never
+looks hung and log-timeout watchdogs keep seeing output. Jobs still waiting for a
+`--concurrency` slot are appended to the last running job's heartbeat as
+`(1 job queued)` or `(2 jobs queued)`; the backlog never takes a line of its own.
+The example above ran with `--concurrency 1`, which is why its second artifact
+waited.
+
+Each command names its own lifecycle: apply uses `Deploying` / `Still deploying` /
+`Deployment complete` / `Deployment failed`, plan validation uses `Validating` /
+`Still validating` / `Validation complete` / `Validation failed`, and `bear check`
+uses `Checking` / `Still checking` / `Check complete` / `Check failed`.
+
+Interactive terminals keep the animated progress bar and per-task spinner instead
+of these lines. Those per-task lines use the same `<n>/<total> <step>` labels, and
+an apply task is named by its artifact alone rather than `<artifact> -> <target>`.
+`--verbose` selects the same plain, line-per-status reporting even on a terminal,
+and streams subprocess output as `  <artifact> | <step> | <line>` while retaining
+bounded failure diagnostics. Without it, step output is captured and only failure
 tails are reported. Treat logs as sensitive; bounded capture does not redact secrets.
 
 ```bash
@@ -267,3 +319,20 @@ bear plan dev --concurrency 5
 bear apply --concurrency 3
 bear plan dev --verbose
 ```
+
+Both flags default to `10`. A lower value is often appropriate for production
+apply: it limits how many artifacts change at the same instant, spreads load on
+deployment APIs and registry rate limits, and keeps the log readable. It bounds
+only how many jobs run in parallel — a failed deployment does not stop the
+remaining ones, and apply is not atomic or ordered. See
+[apply flags](commands/apply.md#flags).
+
+The two commands deliberately print different endings. `bear plan` closes with the
+rule, its `Environment:`/`Commit:` facts, its `deploy`/`skip` lists, and
+`Plan complete: 4 validated, 2 to deploy, 1 skipped`: that block is the artifact a
+reviewer approves. `bear apply` does not repeat it. A successful apply is the phase
+heading, the job lines, and `Apply complete: 2 deployed, 1 skipped in 15s`; only a
+failing apply prints a rule, `Environment: <env>`, and a `failed (N):` list, so a
+failure is never buried in a recap of the plan. Either way the last sentence lets a
+long CI log be read from the bottom up. See [plan output](commands/plan.md#output)
+and [apply output](commands/apply.md#output).

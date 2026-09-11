@@ -122,22 +122,51 @@ func TestEnvironmentPlanApply(t *testing.T) {
 			if err := lock.Save(lockPath); err != nil {
 				t.Fatal(err)
 			}
+			// Every deployment shares one source, so the plan states it once as a
+			// header fact aligned under "Environment:", not per artifact.
+			sourceLabel, sourceCommit := "Commit", environmentGit(t, root, "rev-parse", "HEAD")
+			if mode == "pin" {
+				sourceLabel, sourceCommit = "Pinned", opts.PinCommit
+			}
 			output, err := captureEnvironmentOutput(t, func() error { return PlanWithOptions(path, opts) })
-			if err != nil {
-				t.Fatal(err)
-			}
-			for _, text := range []string{"Environment: int", "disabled: deployment not enabled for environment int", "validate / validate (1/1) | phase"} {
-				if !strings.Contains(output, text) {
-					t.Errorf("plan output missing %q: %s", text, output)
-				}
-			}
-			plan, err := config.ReadPlan(root)
 			if err != nil {
 				t.Fatal(err)
 			}
 			wantDeploys, wantValidations := 1, 2
 			if mode == "all disabled" {
 				wantDeploys, wantValidations = 0, 1
+			}
+			// Plan brands itself like apply, reports each job live, then closes
+			// with a rule, aligned facts, counted sections and one sentence.
+			wantText := []string{
+				"Bear Plan",
+				"Environment: int",
+				fmt.Sprintf("%s:      %s", sourceLabel, sourceCommit[:7]),
+				"skip (1):",
+				"- disabled (disabled): deployment not enabled for environment int",
+				"disabled: Validating... [validate]",
+				"disabled: Validation complete after ",
+				fmt.Sprintf("Validation complete: %s in ", plural(wantValidations, "artifact", "artifacts")),
+				fmt.Sprintf("Plan complete: %d validated, %d to deploy, 1 skipped", wantValidations, wantDeploys),
+			}
+			if wantDeploys > 0 {
+				wantText = append(wantText, "deploy (1):", "- allowed (allowed): ", "Run 'bear apply' to execute this plan.")
+			}
+			for _, text := range wantText {
+				if !strings.Contains(output, text) {
+					t.Errorf("plan output missing %q: %s", text, output)
+				}
+			}
+			// The per-artifact "<commit> => <target>" line is gone: an entry is
+			// one line, and the source belongs to the header.
+			for _, gone := range []string{"=> local", previousCommit[:7] + " =>"} {
+				if strings.Contains(output, gone) {
+					t.Errorf("plan repeated the source under each artifact (%q): %s", gone, output)
+				}
+			}
+			plan, err := config.ReadPlan(root)
+			if err != nil {
+				t.Fatal(err)
 			}
 			if plan.Environment != "int" || plan.ToDeploy != wantDeploys || len(plan.Artifacts) != wantDeploys || plan.Validated != wantValidations || plan.TotalSkips != 1 {
 				t.Fatalf("unexpected saved plan: %+v", plan)
@@ -188,9 +217,10 @@ func TestEnvironmentPlanApply(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if !strings.Contains(output, "Environment: int") || !strings.Contains(output, "Skipped disabled: deployment not enabled for environment int") {
-				t.Errorf("apply output missing snapshot metadata: %s", output)
-			}
+			// Apply acts on the approved snapshot, not on the current (now
+			// permissive) configuration. The proof is the workspace and the lock
+			// file rather than a recap: the disabled artifact is never run and its
+			// history is untouched.
 			if _, err := os.Stat(filepath.Join(root, "disabled", "deployed")); !os.IsNotExist(err) {
 				t.Fatalf("disabled deployment executed: %v", err)
 			}
@@ -201,9 +231,28 @@ func TestEnvironmentPlanApply(t *testing.T) {
 			if !reflect.DeepEqual(lock.Environments["int"]["disabled"], original) {
 				t.Errorf("disabled lock entry changed: %+v", lock.Environments["int"]["disabled"])
 			}
+			if len(lock.Environments) != 1 || len(lock.Environments["int"]) != 1+wantDeploys {
+				t.Errorf("apply wrote history for a skipped artifact: %+v", lock.Environments)
+			}
+			// The approved plan already listed every deployment and skip, so a
+			// successful apply repeats none of it.
+			for _, recap := range []string{summaryRule, "deploy (", "skip (", "failed (", "Environment: int"} {
+				if strings.Contains(output, recap) {
+					t.Errorf("successful apply recapped the plan with %q: %s", recap, output)
+				}
+			}
 			if wantDeploys > 0 {
-				if !strings.Contains(output, "deploy / deploy (1/1) | phase") {
-					t.Errorf("apply output missing step timer: %s", output)
+				for _, text := range []string{
+					"Bear Apply",
+					// The heading names the environment being deployed to.
+					"Deploying 1 artifact to int",
+					"allowed: Deploying... [deploy]",
+					"allowed: Deployment complete after ",
+					"Apply complete: 1 deployed, 1 skipped in ",
+				} {
+					if !strings.Contains(output, text) {
+						t.Errorf("apply output missing %q: %s", text, output)
+					}
 				}
 				if _, err := os.Stat(filepath.Join(root, "allowed", "deployed")); err != nil {
 					t.Fatalf("allowed deployment did not execute: %v", err)
@@ -212,6 +261,9 @@ func TestEnvironmentPlanApply(t *testing.T) {
 				if !ok || entry.Pinned != (mode == "pin") || entry.Commit != plan.Commit {
 					t.Errorf("allowed deployment not recorded correctly: %+v", entry)
 				}
+			} else if output != "Plan for int contains no artifacts to deploy.\n" {
+				// An empty plan says so, names its environment and stops there.
+				t.Errorf("empty-plan apply printed %q", output)
 			}
 			if config.PlanExists(root) {
 				t.Error("apply did not consume plan")
@@ -366,8 +418,19 @@ func TestEnvironmentDependentPlanApply(t *testing.T) {
 		t.Fatal(err)
 	}
 	output, err := captureEnvironmentOutput(t, func() error { return PlanWithOptions(path, opts) })
-	if err != nil || config.PlanExists(root) || !strings.Contains(output, "no changes detected") {
-		t.Fatalf("unchanged plan retained stale file or hid reasons: %v\n%s", err, output)
+	if err != nil || config.PlanExists(root) {
+		t.Fatalf("unchanged plan retained stale file: %v\n%s", err, output)
+	}
+	// A plan with nothing to do still names its environment and still says, per
+	// artifact and with its path, why nothing happens.
+	for _, text := range []string{"Environment: int", "skip (3):",
+		"  - allowed (allowed): no changes detected",
+		"  - disabled (disabled): no changes detected",
+		"  - source (source): no changes detected",
+	} {
+		if !strings.Contains(output, text) {
+			t.Errorf("empty plan hid %q: %s", text, output)
+		}
 	}
 }
 

@@ -37,6 +37,7 @@ type PlanValidation struct {
 // PlanSkipped represents a skipped artifact
 type PlanSkipped struct {
 	Name   string `yaml:"name"`
+	Path   string `yaml:"path,omitempty"`
 	Reason string `yaml:"reason"`
 }
 

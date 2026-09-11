@@ -81,11 +81,11 @@ func (p *Printer) Header(title string) {
 	p.Blank()
 }
 
-// PhaseHeader prints a phase header with line decorations
+// PhaseHeader introduces one phase of a command. Phases are plain headings so
+// a CI log reads as one column of text rather than competing banners.
 func (p *Printer) PhaseHeader(title string) {
-	line := strings.Repeat("━", 3)
 	p.Blank()
-	p.Printf("%s %s %s\n", p.cyan(line), p.bold(title), p.cyan(line))
+	p.Println(p.bold(title))
 	p.Blank()
 }
 
@@ -131,44 +131,12 @@ func (p *Printer) Progress(current, total int, text string) {
 	p.Printf("  %s %s\n", p.dim(fmt.Sprintf("[%d/%d]", current, total)), text)
 }
 
-// BearHeader prints the Bear branding header
+// BearHeader prints the Bear branding header. Phases add their own leading
+// blank line, so the header does not add a trailing one.
 func (p *Printer) BearHeader(command string) {
 	p.Blank()
 	p.Println(p.bold(fmt.Sprintf("Bear %s", command)))
 	p.Println(p.dim(strings.Repeat("─", len(command)+5)))
-	p.Blank()
-}
-
-// Summary prints a summary line at the bottom
-func (p *Printer) Summary(parts ...string) {
-	p.Blank()
-	p.Println(p.dim(strings.Repeat("─", 40)))
-	p.Printf("  %s\n", strings.Join(parts, "  "))
-}
-
-// SummaryValidated returns a formatted validated count
-func (p *Printer) SummaryValidated(n int) string {
-	return p.green(fmt.Sprintf("✓ %d validated", n))
-}
-
-// SummaryDeploy returns a formatted deploy count
-func (p *Printer) SummaryDeploy(n int) string {
-	return p.cyan(fmt.Sprintf("~ %d to deploy", n))
-}
-
-// SummaryDeployed returns a formatted deployed count
-func (p *Printer) SummaryDeployed(n int) string {
-	return p.green(fmt.Sprintf("✓ %d deployed", n))
-}
-
-// SummarySkipped returns a formatted skipped count
-func (p *Printer) SummarySkipped(n int) string {
-	return p.dim(fmt.Sprintf("– %d skipped", n))
-}
-
-// SummaryFailed returns a formatted failed count
-func (p *Printer) SummaryFailed(n int) string {
-	return p.red(fmt.Sprintf("✗ %d failed", n))
 }
 
 // ErrorBox prints captured error output in an indented, dimmed block
@@ -176,16 +144,16 @@ func (p *Printer) ErrorBox(output string) {
 	if output == "" {
 		return
 	}
-	lines := strings.Split(strings.TrimRight(output, "\n"), "\n")
-	for _, line := range lines {
-		p.Printf("      %s\n", p.dim(line))
+	// Indent captured output under the job line that reported the failure.
+	for _, line := range strings.Split(strings.TrimRight(output, "\n"), "\n") {
+		p.Printf("    %s\n", p.dim(line))
 	}
 }
 
-// Hint prints a hint/instruction at the bottom
+// Hint prints a closing instruction, aligned with the result sentence.
 func (p *Printer) Hint(text string) {
 	p.Blank()
-	p.Printf("  %s\n", p.dim(text))
+	p.Println(p.dim(text))
 }
 
 // Warning prints a warning message

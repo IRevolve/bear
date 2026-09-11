@@ -555,10 +555,73 @@ func TestApplySourceVerboseStreamsWithoutDuplicateCapture(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected step failure")
 	}
-	if strings.Count(output, "unique-step-output") != 1 || !strings.Contains(output, "a -> saved-target | deploy | unique-step-output") {
+	if strings.Count(output, "unique-step-output") != 1 || !strings.Contains(output, "a | deploy | unique-step-output") {
 		t.Fatalf("verbose output not streamed exactly once: %s", output)
 	}
-	if !strings.Contains(output, "deploy / deploy (1/1)") || !strings.Contains(output, "failed") {
-		t.Fatalf("missing phase/failure tracking: %s", output)
+	for _, text := range []string{
+		"Bear Apply",
+		"Deploying 1 artifact to int",
+		"a: Deploying... [deploy]",
+		"a: Deployment failed after ",
+		// A failed run reopens the summary: the rule, the environment, one
+		// counted section naming every artifact that failed and why, then the
+		// closing sentence.
+		summaryRule,
+		"Environment: int",
+		"failed (1):",
+		"  - a (.): deploy: ",
+		"Apply failed: 0 deployed, 1 failed in ",
+	} {
+		if !strings.Contains(output, text) {
+			t.Fatalf("missing phase/failure tracking %q: %s", text, output)
+		}
+	}
+	// Failure reports only what failed; it does not recap the approved plan.
+	for _, recap := range []string{"deploy (", "skip ("} {
+		if strings.Contains(output, recap) {
+			t.Fatalf("failed run recapped the plan with %q: %s", recap, output)
+		}
+	}
+}
+
+// A successful apply prints the phase and the closing sentence and nothing
+// else. Everything a reader needs about skips was approved in the plan, and the
+// evidence that a skip was honoured is the lock file, not a printed recap.
+func TestApplySourceSuccessReportsNoRecap(t *testing.T) {
+	root, plan := applySourceFixture(t, "printf a > .bear/deploy-a")
+	plan.Skipped = []config.PlanSkipped{{Name: "untouched", Path: "app", Reason: "deployment not enabled for environment int"}}
+	plan.TotalSkips = 1
+	applySourceSave(t, root, plan)
+	output, err := captureEnvironmentOutput(t, func() error {
+		return ApplyWithOptions(filepath.Join(root, "bear.config.yml"), Options{NoCommit: true, Concurrency: 1})
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, text := range []string{
+		"Bear Apply",
+		"Deploying 1 artifact to int",
+		"a: Deployment complete after ",
+		"Apply complete: 1 deployed, 1 skipped in ",
+	} {
+		if !strings.Contains(output, text) {
+			t.Errorf("apply output missing %q: %s", text, output)
+		}
+	}
+	for _, recap := range []string{summaryRule, "Environment: int", "deploy (", "skip (", "failed (", "untouched"} {
+		if strings.Contains(output, recap) {
+			t.Errorf("successful apply printed %q: %s", recap, output)
+		}
+	}
+	// The skipped artifact was neither run nor given deployment history.
+	lock, err := config.LoadLock(filepath.Join(root, "bear.lock.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := lock.GetArtifact("int", "untouched"); ok {
+		t.Errorf("skipped artifact recorded in lock: %+v", lock.Environments)
+	}
+	if len(lock.Environments["int"]) != 1 {
+		t.Errorf("apply wrote unexpected history: %+v", lock.Environments)
 	}
 }

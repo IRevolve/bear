@@ -37,8 +37,23 @@ type TrackedTask struct {
 	streamed       bool
 }
 
+// progressVerbs names the lifecycle of one tracked operation.
+type progressVerbs struct {
+	active, still, done, failed string
+}
+
+var progressOperations = map[string]progressVerbs{
+	"deploy":   {"Deploying", "Still deploying", "Deployment complete", "Deployment failed"},
+	"validate": {"Validating", "Still validating", "Validation complete", "Validation failed"},
+	"check":    {"Checking", "Still checking", "Check complete", "Check failed"},
+}
+
+var defaultVerbs = progressVerbs{"Running", "Still running", "Complete", "Failed"}
+
 // ProgressTracker provides live terminal progress display with spinner,
-// progress bar, timer, and real-time task completion updates.
+// progress bar, timer, and real-time task completion updates. Without a
+// terminal it reports one line per job on every status change plus a periodic
+// update for each running job, which stays readable in CI logs.
 type ProgressTracker struct {
 	mu         sync.Mutex
 	tasks      []*TrackedTask
@@ -50,7 +65,8 @@ type ProgressTracker struct {
 	stoppedAt  time.Time
 	linesDrawn int
 	spinnerIdx int
-	title      string
+	verbs      progressVerbs
+	nameWidth  int
 	writers    map[*stepWriter]struct{}
 }
 
@@ -58,8 +74,9 @@ var spinnerFrames = []rune{'⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧
 
 var ansiColorPattern = regexp.MustCompile(`\x1b\[[0-9;]*m`)
 
-// NewProgressTracker creates a new progress tracker
-func NewProgressTracker(p *Printer, title string, taskNames []string) *ProgressTracker {
+// NewProgressTracker creates a new progress tracker. Callers print their own
+// phase header, so the tracker only reports the jobs themselves.
+func NewProgressTracker(p *Printer, taskNames []string) *ProgressTracker {
 	tasks := make([]*TrackedTask, len(taskNames))
 	for i, name := range taskNames {
 		tasks[i] = &TrackedTask{
@@ -72,6 +89,11 @@ func NewProgressTracker(p *Printer, title string, taskNames []string) *ProgressT
 	if f, ok := p.out.(*os.File); ok {
 		isTTY = term.IsTerminal(int(f.Fd()))
 	}
+	// Pad names so status lines form columns instead of ragged text.
+	width := 0
+	for _, name := range taskNames {
+		width = max(width, utf8.RuneCountInString(name))
+	}
 
 	return &ProgressTracker{
 		tasks:     tasks,
@@ -80,7 +102,18 @@ func NewProgressTracker(p *Printer, title string, taskNames []string) *ProgressT
 		isTTY:     isTTY,
 		done:      make(chan struct{}),
 		finished:  make(chan struct{}),
-		title:     title,
+		verbs:     defaultVerbs,
+		nameWidth: width,
+	}
+}
+
+// SetOperation selects the verbs used for status lines ("deploy", "validate",
+// or "check"). Call before Start.
+func (pt *ProgressTracker) SetOperation(kind string) {
+	pt.mu.Lock()
+	defer pt.mu.Unlock()
+	if verbs, ok := progressOperations[kind]; ok {
+		pt.verbs = verbs
 	}
 }
 
@@ -94,6 +127,10 @@ func (pt *ProgressTracker) UsePlainOutput() {
 }
 
 const stepLineSize = 4096
+
+// heartbeatInterval is how often each running job reports progress without a
+// terminal, matching the cadence CI logs stay readable at.
+const heartbeatInterval = 10 * time.Second
 
 type stepWriter struct {
 	tracker *ProgressTracker
@@ -174,8 +211,7 @@ func (pt *ProgressTracker) Start() {
 	pt.mu.Lock()
 	interval := 80 * time.Millisecond
 	if !pt.isTTY {
-		pt.printer.Printf("  %s\n", pt.title)
-		interval = 5 * time.Second
+		interval = heartbeatInterval
 	}
 	pt.mu.Unlock()
 
@@ -203,13 +239,13 @@ func (pt *ProgressTracker) MarkRunning(index int) {
 		pt.tasks[index].Status = TaskRunning
 		pt.tasks[index].StartTime = time.Now()
 		if !pt.isTTY {
-			pt.printUpdate(pt.tasks[index])
+			pt.printer.Println(pt.statusLine(pt.tasks[index], pt.verbs.active, false))
 		}
 	}
 }
 
 // MarkStep starts a new phase timer immediately before executing a step.
-func (pt *ProgressTracker) MarkStep(index int, phase string) {
+func (pt *ProgressTracker) MarkStep(index int, step string, number, total int) {
 	pt.mu.Lock()
 	defer pt.mu.Unlock()
 	if index < 0 || index >= len(pt.tasks) {
@@ -218,14 +254,14 @@ func (pt *ProgressTracker) MarkStep(index int, phase string) {
 	task := pt.tasks[index]
 	pt.flushWriters(index)
 	task.streamed = false
-	if !pt.isTTY && task.Phase != "" {
-		pt.printer.Printf("  %s | %s completed in %s\n", task.Name, task.Phase, formatDuration(time.Since(task.PhaseStartTime)))
+	task.Phase = step
+	if total > 1 {
+		task.Phase = fmt.Sprintf("%d/%d %s", number, total, step)
 	}
-	task.Phase = phase
 	task.PhaseStartTime = time.Now()
 	task.PhaseDuration = 0
 	if !pt.isTTY {
-		pt.printUpdate(task)
+		pt.printer.Println(pt.statusLine(task, pt.verbs.active, false))
 	}
 }
 
@@ -241,7 +277,7 @@ func (pt *ProgressTracker) MarkDone(index int) {
 			pt.tasks[index].PhaseDuration = time.Since(pt.tasks[index].PhaseStartTime)
 		}
 		if !pt.isTTY {
-			pt.printUpdate(pt.tasks[index])
+			pt.printer.Println(pt.completionLine(pt.tasks[index]))
 		}
 	}
 }
@@ -270,7 +306,7 @@ func (pt *ProgressTracker) MarkFailed(index int, err error, output string) {
 				pt.printer.Printf("    %v\n", err)
 			}
 		} else {
-			pt.printUpdate(pt.tasks[index])
+			pt.printer.Println(pt.completionLine(pt.tasks[index]))
 		}
 		if !pt.tasks[index].streamed {
 			if len(output) > tailBufferSize {
@@ -325,14 +361,23 @@ func (pt *ProgressTracker) render() {
 	defer pt.mu.Unlock()
 
 	if !pt.isTTY {
-		completed, running, total := pt.counts()
-		if running > 0 {
-			pt.printer.Println(pt.buildProgressBar(completed, total, time.Since(pt.startTime)))
-			for _, task := range pt.tasks {
-				if task.Status == TaskRunning {
-					pt.printer.Println(pt.buildTaskLine(task))
-				}
+		var running []*TrackedTask
+		queued := 0
+		for _, task := range pt.tasks {
+			switch task.Status {
+			case TaskRunning:
+				running = append(running, task)
+			case TaskPending:
+				queued++
 			}
+		}
+		for i, task := range running {
+			line := pt.statusLine(task, pt.verbs.still, true)
+			// Report the backlog once per update, on the last running job.
+			if queued > 0 && i == len(running)-1 {
+				line += fmt.Sprintf(" (%s queued)", plural(queued, "job", "jobs"))
+			}
+			pt.printer.Println(line)
 		}
 		return
 	}
@@ -430,6 +475,8 @@ func (pt *ProgressTracker) counts() (completed, running, total int) {
 	return
 }
 
+// buildProgressBar and buildTaskLine render the animated terminal view only.
+// Without a terminal, statusLine and completionLine report each job instead.
 func (pt *ProgressTracker) buildProgressBar(completed, total int, elapsed time.Duration) string {
 	barWidth := 20
 	filled := 0
@@ -441,15 +488,11 @@ func (pt *ProgressTracker) buildProgressBar(completed, total int, elapsed time.D
 	}
 
 	bar := strings.Repeat("█", filled) + strings.Repeat("░", barWidth-filled)
-	timeStr := formatDuration(elapsed)
-	if !pt.isTTY {
-		return fmt.Sprintf("  [%s%s] %d/%d | %s | total %s", strings.Repeat("#", filled), strings.Repeat("-", barWidth-filled), completed, total, pt.title, timeStr)
-	}
 
 	return fmt.Sprintf("  %s  %d/%d  ⏱ %s",
 		pt.printer.cyan(bar),
 		completed, total,
-		pt.printer.dim(timeStr))
+		pt.printer.dim(formatDuration(elapsed)))
 }
 
 func (pt *ProgressTracker) buildTaskLine(task *TrackedTask) string {
@@ -462,22 +505,6 @@ func (pt *ProgressTracker) buildTaskLine(task *TrackedTask) string {
 	detail := fmt.Sprintf("total %s", formatDuration(duration))
 	if task.Phase != "" {
 		detail = fmt.Sprintf("%s | phase %s | %s", task.Phase, formatDuration(phaseDuration), detail)
-	}
-	if !pt.isTTY {
-		status := "pending"
-		switch task.Status {
-		case TaskRunning:
-			status = "running"
-		case TaskDone:
-			status = "done"
-		case TaskFailed:
-			status = "failed"
-		}
-		line := fmt.Sprintf("  %s | %s | %s", task.Name, status, detail)
-		if task.Error != nil {
-			line += fmt.Sprintf(" | %v", task.Error)
-		}
-		return line
 	}
 	switch task.Status {
 	case TaskDone:
@@ -503,11 +530,40 @@ func (pt *ProgressTracker) buildTaskLine(task *TrackedTask) string {
 	return ""
 }
 
-// printUpdate is called with mu held so parallel workers cannot interleave output.
-func (pt *ProgressTracker) printUpdate(task *TrackedTask) {
-	completed, _, total := pt.counts()
-	pt.printer.Println(pt.buildProgressBar(completed, total, time.Since(pt.startTime)))
-	pt.printer.Println(pt.buildTaskLine(task))
+// jobLabel pads a job name so every status line starts in the same column.
+func (pt *ProgressTracker) jobLabel(task *TrackedTask) string {
+	padding := max(0, pt.nameWidth-utf8.RuneCountInString(task.Name))
+	return fmt.Sprintf("  %s:%s", task.Name, strings.Repeat(" ", padding))
+}
+
+// statusLine reports one job's current state on a single line. It is called
+// with mu held so parallel workers cannot interleave output.
+func (pt *ProgressTracker) statusLine(task *TrackedTask, verb string, elapsed bool) string {
+	var details []string
+	if elapsed && !task.StartTime.IsZero() {
+		details = append(details, formatElapsed(time.Since(task.StartTime))+" elapsed")
+	}
+	if task.Phase != "" {
+		details = append(details, task.Phase)
+	}
+	line := fmt.Sprintf("%s %s...", pt.jobLabel(task), verb)
+	if len(details) > 0 {
+		line += fmt.Sprintf(" [%s]", strings.Join(details, ", "))
+	}
+	return line
+}
+
+// completionLine reports a finished job, including why it failed.
+func (pt *ProgressTracker) completionLine(task *TrackedTask) string {
+	verb := pt.verbs.done
+	if task.Status == TaskFailed {
+		verb = pt.verbs.failed
+	}
+	line := fmt.Sprintf("%s %s after %s", pt.jobLabel(task), verb, formatElapsed(task.Duration))
+	if task.Status == TaskFailed && task.Error != nil {
+		line += fmt.Sprintf(": %v", task.Error)
+	}
+	return line
 }
 
 // clearLines moves the cursor up and clears the previously drawn lines
@@ -531,6 +587,15 @@ func (pt *ProgressTracker) printFinal() {
 			pt.printer.Println(pt.buildTaskLine(task))
 		}
 	}
+}
+
+// formatElapsed formats a duration in whole seconds for status lines.
+func formatElapsed(d time.Duration) string {
+	d = d.Round(time.Second)
+	if d < time.Minute {
+		return fmt.Sprintf("%ds", int(d.Seconds()))
+	}
+	return fmt.Sprintf("%dm%02ds", int(d.Minutes()), int(d.Seconds())%60)
 }
 
 // formatDuration formats a duration as a human-readable string

@@ -137,12 +137,12 @@ func TestExecuteStepPreservesSuccessfulBackgroundChild(t *testing.T) {
 
 func TestExecuteStepStreamsBeforeExit(t *testing.T) {
 	var output TailBuffer
-	pt := NewProgressTracker(NewPrinterWithWriter(&output), "Build", []string{"api"})
+	pt := NewProgressTracker(NewPrinterWithWriter(&output), []string{"api"})
 	pt.UsePlainOutput()
 	pt.Start()
 	defer pt.Stop()
 	pt.MarkRunning(0)
-	pt.MarkStep(0, "compile")
+	pt.MarkStep(0, "compile", 1, 1)
 	var capture TailBuffer
 	writer := io.MultiWriter(&capture, pt.StepWriter(0, "compile"))
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

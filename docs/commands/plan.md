@@ -34,6 +34,12 @@ The environment is positional only; there is no named flag or alias for it.
 | `--force` | Ignore pins, but not environment deployment policy |
 | `--verbose` | Stream subprocess output while retaining bounded failure diagnostics |
 
+Ten parallel validations suit a build agent with spare cores. Lower it when steps
+contend for one shared resource — a Docker daemon, a test database, a rate-limited
+registry — or when interleaved job output is hard to read. `bear apply` has its own
+`--concurrency` with the same default; see [its guidance](apply.md#flags) before
+reusing this number for production deployments.
+
 ## Environment Policy
 
 In `bear.artifact.yml`, use `environments: [dev, int]` to allow deployment only in
@@ -109,3 +115,92 @@ or deployment-policy snapshots must be regenerated.
 | `dependency '<name>' changed` | A transitive dependency differs from the consumer's deployed baseline |
 | `pinned (forced deployment)` | `--force` selects an artifact pinned in this environment |
 | Environment policy skip | The allowlist is absent, empty, or excludes the selected environment; validation is retained |
+
+## Output
+
+Validation reports live under a plain phase heading, then the command ends with
+the run's facts, its counted `deploy`/`skip` lists, and one closing sentence. That
+summary is the review artifact: it is what a human approves, and what `bear apply`
+then executes without reprinting.
+
+```text
+Bear Plan
+─────────
+
+Validating 4 artifacts
+
+  shared:             Validating...
+  shared:             Validating... [1/2 Test]
+  kira-mail-adapter:  Validating...
+  kira-mail-adapter:  Validating... [1/2 Test]
+  kira-teams-adapter: Validating...
+  kira-teams-adapter: Validating... [1/2 Test]
+  checkout-api:       Validating...
+  checkout-api:       Validating... [1/2 Test]
+  shared:             Validating... [2/2 Build]
+  checkout-api:       Validating... [2/2 Build]
+  kira-teams-adapter: Validating... [2/2 Build]
+  kira-mail-adapter:  Validating... [2/2 Build]
+  shared:             Validation complete after 3s
+  checkout-api:       Validation complete after 3s
+  kira-mail-adapter:  Validation complete after 3s
+  kira-teams-adapter: Validation complete after 3s
+
+Validation complete: 4 artifacts in 3s
+
+────────────────────────────────────────
+Environment: prd
+Commit:      b11f03a
+
+deploy (2):
+  - checkout-api (services/checkout-api): new artifact
+  - kira-teams-adapter (services/kira/teams-adapter): new artifact
+
+skip (1):
+  - kira-mail-adapter (services/kira/mail-adapter): deployment not enabled for environment prd
+
+Plan complete: 4 validated, 2 to deploy, 1 skipped
+
+Run 'bear apply' to execute this plan.
+```
+
+The block after the rule states the run's facts on one aligned column.
+`Environment:` is always present. `Commit:` carries the short source commit the
+plan was built from, replaced by `Pinned:` when `--pin` selected the revision.
+`Artifacts:` follows when artifact filters were given, and `Changes:` reports the
+number of changed files when there are any. Every entry in the plan comes from that
+one source, so it is stated once in the header rather than repeated per artifact.
+
+Each section is labelled with its outcome and entry count (`deploy (2):`,
+`skip (1):`), and its entries are sorted by name so repeated runs of the same plan
+produce comparable summaries even though validations finish in any order. An entry
+is a single line, `  - <name> (<path>): <reason>`; the parenthesised path is omitted
+when the plan recorded none. Empty sections are omitted. A `deploy` entry's reason
+is the artifact's [change reason](#change-reasons); a `skip` entry's reason is the
+recorded skip, such as `no changes detected`,
+`pinned (use --force to override)`, or `deployment not enabled for environment prd`.
+Neither entry repeats the commit or names a target: the commit is the header's, and
+the target is configuration you can read in `bear.artifact.yml`.
+
+The validation phase closes with `Validation complete: <n> artifacts in <time>`,
+and the command closes with `Plan complete: 4 validated, 2 to deploy, 1 skipped`;
+the skipped count is listed only when there are skips. The
+`Run 'bear apply' to execute this plan.` hint follows only when the plan has
+something to deploy, so a validation-only plan ends at the sentence. A failed
+validation instead prints the bounded output tail indented four spaces under that
+job's `Validation failed` line, then `Validation failed for: <names>` and a hint to
+fix the errors and replan.
+
+A plan with nothing to validate or deploy prints `No changes detected. Nothing to
+plan.` (or `No artifacts found matching: [...]` for an unmatched filter) followed by
+the rule, the `Environment:` line, and any `skip` list. That path reports no
+`Commit:` fact and no closing sentence, because nothing was validated.
+
+`bear apply` does not reprint this summary; it logs the deployments it runs and
+lists only failures. See [apply output](apply.md#output).
+
+Validation progress uses the same non-terminal reporting as apply: one line per
+status change with job names padded into a common column, a `Still validating...`
+line every 10 seconds per running job, and the remaining backlog appended to the
+last running job's heartbeat as `(1 job queued)`. Interactive terminals draw an
+animated progress bar instead. See [Live Output](../ci-cd.md#live-output).

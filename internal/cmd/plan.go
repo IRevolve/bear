@@ -116,6 +116,8 @@ func PlanWithOptions(configPath string, opts Options) (retErr error) {
 		}
 	}
 
+	p.BearHeader("Plan")
+
 	// Group actions
 	var validates, deploys, skips []internal.PlannedAction
 	for _, action := range plan.Actions {
@@ -130,17 +132,18 @@ func PlanWithOptions(configPath string, opts Options) (retErr error) {
 	}
 
 	if len(validates) == 0 && len(deploys) == 0 {
-		if plan.Environment != "" {
-			p.Printf("Environment: %s\n", plan.Environment)
-		}
-		for _, s := range skips {
-			p.Printf("  %s: %s\n", s.Artifact.Artifact.Name, s.Reason)
-		}
+		p.Blank()
 		if len(opts.Artifacts) > 0 && len(skips) == 0 {
 			p.Printf("No artifacts found matching: %v\n", opts.Artifacts)
 		} else {
 			p.Println("No changes detected. Nothing to plan.")
 		}
+		skip := make([]summaryEntry, 0, len(skips))
+		for _, s := range skips {
+			skip = append(skip, skipEntry(planSkip(s)))
+		}
+		p.Blank()
+		printEnvironmentSummary(p, summaryHeader{Environment: plan.Environment}, summarySection{Label: "skip", Color: p.dim, Entries: skip})
 		return nil
 	}
 
@@ -170,7 +173,7 @@ func PlanWithOptions(configPath string, opts Options) (retErr error) {
 
 	// Phase 1: Validate all changed artifacts in parallel
 	if len(validates) > 0 {
-		p.PhaseHeader(fmt.Sprintf("Validating %d artifact(s)", len(validates)))
+		p.PhaseHeader("Validating " + plural(len(validates), "artifact", "artifacts"))
 
 		// Build task names for progress tracker
 		valTaskNames := make([]string, len(validates))
@@ -178,7 +181,8 @@ func PlanWithOptions(configPath string, opts Options) (retErr error) {
 			valTaskNames[i] = v.Artifact.Artifact.Name
 		}
 
-		pt := NewProgressTracker(p, fmt.Sprintf("Validating %d artifact(s)", len(validates)), valTaskNames)
+		pt := NewProgressTracker(p, valTaskNames)
+		pt.SetOperation("validate")
 		if opts.Verbose {
 			pt.UsePlainOutput()
 		}
@@ -190,7 +194,7 @@ func PlanWithOptions(configPath string, opts Options) (retErr error) {
 			var combinedOutput TailBuffer
 
 			for stepIndex, step := range v.Steps {
-				pt.MarkStep(i, fmt.Sprintf("validate / %s (%d/%d)", step.Name, stepIndex+1, len(v.Steps)))
+				pt.MarkStep(i, step.Name, stepIndex+1, len(v.Steps))
 				var output io.Writer = &combinedOutput
 				if opts.Verbose {
 					output = io.MultiWriter(&combinedOutput, pt.StepWriter(i, step.Name))
@@ -227,8 +231,7 @@ func PlanWithOptions(configPath string, opts Options) (retErr error) {
 			return fmt.Errorf("validation failed: %w", errors.Join(CollectErrors(errs)...))
 		}
 
-		p.Blank()
-		p.Printf("  %s %s\n", p.green("All validations passed!"), p.dim(fmt.Sprintf("⏱ %s", formatDuration(pt.TotalElapsed()))))
+		printResult(p, p.green, "Validation complete", []string{plural(len(validates), "artifact", "artifacts")}, pt.TotalElapsed())
 	}
 
 	// Generated untracked output is allowed and included in the saved fingerprint.
@@ -279,10 +282,7 @@ func PlanWithOptions(configPath string, opts Options) (retErr error) {
 	}
 
 	for _, s := range skips {
-		planFile.Skipped = append(planFile.Skipped, config.PlanSkipped{
-			Name:   s.Artifact.Artifact.Name,
-			Reason: s.Reason,
-		})
+		planFile.Skipped = append(planFile.Skipped, planSkip(s))
 		planFile.TotalSkips++
 	}
 
@@ -291,87 +291,58 @@ func PlanWithOptions(configPath string, opts Options) (retErr error) {
 	}
 
 	// Phase 3: Show the validated plan
-	printValidatedPlan(p, plan, planFile, rootPath, opts)
+	printValidatedPlan(p, plan, planFile, opts)
 
 	return nil
 }
 
-func printValidatedPlan(p *Printer, plan *internal.Plan, planFile *config.PlanFile, rootPath string, opts Options) {
-	p.PhaseHeader("Plan")
-	if planFile.Environment != "" {
-		p.Printf("  Environment: %s\n", planFile.Environment)
-		p.Blank()
+func printValidatedPlan(p *Printer, plan *internal.Plan, planFile *config.PlanFile, opts Options) {
+	header := summaryHeader{Environment: planFile.Environment}
+	// The source is identical for every deployment, so report it once here
+	// instead of repeating it under each artifact.
+	commit := [2]string{"Commit", shortCommit(planFile.Commit)}
+	if planFile.Pinned {
+		commit[0] = "Pinned"
 	}
-
+	header.Facts = append(header.Facts, commit)
 	if len(opts.Artifacts) > 0 {
-		p.Printf("  Artifacts: %s\n", strings.Join(opts.Artifacts, ", "))
-		p.Blank()
+		header.Facts = append(header.Facts, [2]string{"Artifacts", strings.Join(opts.Artifacts, ", ")})
 	}
-
-	if opts.PinCommit != "" {
-		p.Printf("  %s Pinning to: %s\n", p.yellow("📌"), opts.PinCommit[:min(8, len(opts.PinCommit))])
-		p.Blank()
-	}
-
 	if plan.TotalChanges > 0 {
-		p.Printf("  %s\n", p.dim(fmt.Sprintf("%d file(s) changed", plan.TotalChanges)))
-		p.Blank()
+		header.Facts = append(header.Facts, [2]string{"Changes", plural(plan.TotalChanges, "file", "files")})
 	}
 
-	// Show deployments
-	if len(planFile.Artifacts) > 0 {
-		p.Printf("  %s\n", p.cyan("To Deploy:"))
-		p.Blank()
-		for _, d := range planFile.Artifacts {
-			p.Printf("  %s %s\n", p.bold("~"), p.bold(d.Name))
-			p.Detail("Path:  ", d.Path)
-			p.Detail("Target:", d.Target)
-			p.Detail("Reason:", d.Reason)
-
-			if plan.LockFile != nil {
-				lastCommit := plan.LockFile.GetLastDeployedCommit(planFile.Environment, d.Name)
-				if lastCommit != "" {
-					p.Detail("Last:  ", lastCommit[:min(7, len(lastCommit))])
-				} else {
-					p.Detail("Last:  ", "(never deployed)")
-				}
-			}
-
-			if len(d.Steps) > 0 {
-				p.Detail("Steps: ", fmt.Sprintf("%d", len(d.Steps)))
-				for _, step := range d.Steps {
-					p.Printf("             %s\n", p.dim("- "+step.Name))
-				}
-			}
-			p.Blank()
-		}
+	deploy := make([]summaryEntry, 0, len(planFile.Artifacts))
+	for _, artifact := range planFile.Artifacts {
+		deploy = append(deploy, deployEntry(artifact))
 	}
+	p.Blank()
+	printEnvironmentSummary(p, header,
+		summarySection{Label: "deploy", Color: p.cyan, Entries: deploy},
+		summarySection{Label: "skip", Color: p.dim, Entries: planSkipEntries(planFile.Skipped)},
+	)
 
-	// Show skips (compact)
-	if len(planFile.Skipped) > 0 {
-		p.Printf("  %s\n", p.dim("Skipped:"))
-		p.Blank()
-		for _, s := range planFile.Skipped {
-			p.Printf("  %s: %s\n", p.dim(s.Name), s.Reason)
-		}
-		p.Blank()
-	}
-
-	// Summary
-	parts := []string{}
-	if planFile.Validated > 0 {
-		parts = append(parts, p.SummaryValidated(planFile.Validated))
-	}
-	if planFile.ToDeploy > 0 {
-		parts = append(parts, p.SummaryDeploy(planFile.ToDeploy))
+	// The closing sentence mirrors apply, so both commands end the same way.
+	counts := []string{
+		plural(planFile.Validated, "validated", "validated"),
+		plural(planFile.ToDeploy, "to deploy", "to deploy"),
 	}
 	if planFile.TotalSkips > 0 {
-		parts = append(parts, p.SummarySkipped(planFile.TotalSkips))
+		counts = append(counts, plural(planFile.TotalSkips, "skipped", "skipped"))
 	}
-	p.Summary(parts...)
+	printResult(p, p.cyan, "Plan complete", counts, 0)
 
 	if planFile.ToDeploy > 0 {
 		p.Hint("Run 'bear apply' to execute this plan.")
+	}
+}
+
+// planSkip records why an artifact is not deployed.
+func planSkip(action internal.PlannedAction) config.PlanSkipped {
+	return config.PlanSkipped{
+		Name:   action.Artifact.Artifact.Name,
+		Path:   action.Artifact.Path,
+		Reason: action.Reason,
 	}
 }
 

@@ -87,9 +87,16 @@ func TestApplyPreflightsEntireEnvironmentSnapshot(t *testing.T) {
 					writeEnvironmentFixture(t, lockPath, string(originalLock))
 				}
 				// No current config/artifact files: apply must use only the saved evidence.
-				err = ApplyWithOptions(filepath.Join(root, "bear.config.yml"), Options{Environment: "int", NoCommit: true, Concurrency: 1})
+				output, err := captureEnvironmentOutput(t, func() error {
+					return ApplyWithOptions(filepath.Join(root, "bear.config.yml"), Options{Environment: "int", NoCommit: true, Concurrency: 1})
+				})
 				if err == nil || !strings.Contains(err.Error(), wantError) || !strings.Contains(err.Error(), "run 'bear plan <environment>' again") {
 					t.Fatalf("expected actionable %q error, got %v", wantError, err)
+				}
+				// A refused plan is reported by the error alone. Apply prints no
+				// header, no environment and no summary for work it will not do.
+				if output != "" {
+					t.Errorf("rejected plan printed %q", output)
 				}
 				for _, marker := range []string{"subprocess", "deployed"} {
 					if _, err := os.Stat(filepath.Join(root, marker)); !os.IsNotExist(err) {
