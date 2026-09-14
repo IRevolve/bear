@@ -129,14 +129,34 @@ func PlanWithOptions(configPath string, opts Options) (retErr error) {
 		}
 	}
 
+	// Libraries are never deployable, so a validate-only action (no matching
+	// deploy) means the artifact is a library (LoadGraph guarantees every
+	// non-library target has deploy steps). Libraries are surfaced only
+	// indirectly, through the "dependency 'x' changed" reason on whatever
+	// depends on them; they never get an entry of their own here, changed
+	// or not, so counts and the report below are computed on non-library
+	// actions only.
+	nonLibValidates := make([]internal.PlannedAction, 0, len(validates))
+	for _, v := range validates {
+		if !v.Artifact.Artifact.IsLib {
+			nonLibValidates = append(nonLibValidates, v)
+		}
+	}
+	nonLibSkips := make([]internal.PlannedAction, 0, len(skips))
+	for _, s := range skips {
+		if !s.Artifact.Artifact.IsLib {
+			nonLibSkips = append(nonLibSkips, s)
+		}
+	}
+
 	// A positional filter that matched nothing is rejected by CreatePlanWithOptions
 	// before any output, so every artifact reaching this point is either
 	// validated/deployed or accounted for below as a skip.
-	if len(validates) == 0 && len(deploys) == 0 {
+	if len(nonLibValidates) == 0 && len(deploys) == 0 {
 		p.Blank()
 		p.Println("No changes detected. Nothing to plan.")
-		skip := make([]summaryEntry, 0, len(skips))
-		for _, s := range skips {
+		skip := make([]summaryEntry, 0, len(nonLibSkips))
+		for _, s := range nonLibSkips {
 			skip = append(skip, skipEntry(planSkip(s)))
 		}
 		p.Blank()
@@ -147,16 +167,8 @@ func PlanWithOptions(configPath string, opts Options) (retErr error) {
 	planFile := config.NewPlanFile(currentCommit)
 	planFile.Environment = plan.Environment
 	planFile.Pinned = opts.PinCommit != ""
-	planFile.Changed = len(validates)
+	planFile.Changed = len(nonLibValidates)
 	planFile.SourceFingerprint = fingerprint
-
-	// deploying is the set of artifact names that will be deployed, used below
-	// to find affected artifacts (validates) that have no deploy action of
-	// their own, such as libraries.
-	deploying := make(map[string]bool, len(deploys))
-	for _, d := range deploys {
-		deploying[d.Artifact.Artifact.Name] = true
-	}
 
 	for _, d := range deploys {
 		vars := mergeVars(cfg, d.Artifact.Artifact.Target, d.Artifact.Language, d.Artifact.Artifact.Vars, plan.Environment)
@@ -187,27 +199,8 @@ func PlanWithOptions(configPath string, opts Options) (retErr error) {
 		planFile.ToDeploy++
 	}
 
-	for _, s := range skips {
+	for _, s := range nonLibSkips {
 		planFile.Skipped = append(planFile.Skipped, planSkip(s))
-		planFile.TotalSkips++
-	}
-
-	// A library, or any artifact affected only because a dependency changed,
-	// gets a validate action with no matching deploy or skip action of its
-	// own (LoadGraph guarantees every non-library target has deploy steps, so
-	// this is libraries only). Fold it into the single skip list instead of a
-	// separate section: every affected artifact then appears in exactly one
-	// place, tagged so a library reads as a library, not a missed deployment.
-	skippedByName := make(map[string]bool, len(planFile.Skipped))
-	for _, s := range planFile.Skipped {
-		skippedByName[s.Name] = true
-	}
-	for _, v := range validates {
-		name := v.Artifact.Artifact.Name
-		if deploying[name] || skippedByName[name] {
-			continue
-		}
-		planFile.Skipped = append(planFile.Skipped, planSkip(v))
 		planFile.TotalSkips++
 	}
 
@@ -267,7 +260,6 @@ func planSkip(action internal.PlannedAction) config.PlanSkipped {
 		Name:   action.Artifact.Artifact.Name,
 		Path:   action.Artifact.Path,
 		Reason: action.Reason,
-		IsLib:  action.Artifact.Artifact.IsLib,
 	}
 }
 

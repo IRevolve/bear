@@ -250,16 +250,15 @@ Bear Plan
 
 ────────────────────────────────────────
 Environment: int
-Commit:      68a7fe1
+Commit:      cadc967
 
 deploy (1):
   - api (services/api): new artifact
 
-skip (2):
+skip (1):
   - backoffice (services/backoffice): deployment not enabled for environment int
-  - lib shared (libs/shared): new artifact
 
-Plan complete: 3 changed, 1 to deploy, 2 skipped
+Plan complete: 2 changed, 1 to deploy, 1 skipped
 ```
 
 The facts are `Environment:` always, `Commit:` with the short source commit —
@@ -269,18 +268,19 @@ source, so it is reported once in the header instead of under each artifact. Eac
 section is labelled with its outcome and entry count, its entries are sorted by
 name so two runs of the same plan produce comparable summaries, and each entry is
 a single line: `  - <name> (<path>): <reason>`. The path is omitted when the plan
-recorded none, and empty sections are omitted. A library's entry additionally
-carries a dim `lib` tag before its bold name, so it reads as a library, never as a
-missed deployment; the tag never appears on a regular artifact.
+recorded none, and empty sections are omitted.
 
 Two sections, not three: `deploy` lists what apply will run; `skip` lists every
-other artifact affected by a source change and why it did not deploy — a
-would-be deployment blocked by policy (`deployment not enabled for environment
-prd`, `pinned (use --force to override)`, and so on), *and* any artifact or
-library that changed but has nothing to deploy in the first place, typically a
-library, since libraries are never deployable, tagged `lib` in that case. Every
-artifact affected by a source change appears in exactly one of these two
-sections, never both and never neither.
+other non-library artifact affected by a source change and why it did not
+deploy — a would-be deployment blocked by policy (`deployment not enabled for
+environment prd`, `pinned (use --force to override)`, and so on). A library
+never appears in either section, changed or not: libraries are never
+deployable, so listing one would read as a missed deployment it never was. A
+library's own change surfaces only indirectly, through the `dependency
+'<name>' changed` reason on whatever depends on it. Every non-library artifact
+affected by a source change appears in exactly one of these two sections,
+never both and never neither.
+
 
 `bear apply` prints its own branding header, then the phase heading, the job
 lines, and the closing sentence. A successful run has no rule, no `Environment:`
@@ -327,12 +327,16 @@ run are not redeployed and are not listed; they only raise the `skipped` count.
 `bear.lock.yml` and the retained plan remain the record of what is deployed.
 
 One sentence closes each command, so a long CI log can be read from the bottom up:
-`Plan complete: 3 changed, 1 to deploy, 2 skipped` for plan, and
+`Plan complete: 2 changed, 1 to deploy, 1 skipped` for plan, and
 `Apply complete: 1 deployed, 1 skipped in 0s` — or
 `Apply failed: 0 deployed, 1 failed, 1 skipped in 0s` — for apply. Plan's `changed`
-count is not "validated": it is however many artifacts and libraries a source
-change affected, whether or not they ended up in `deploy`; the rest end up in
-`skip`, so `to deploy` + `skipped` always equals `changed`. A publishing apply adds
+count is not "validated": it is however many non-library artifacts a source
+change affected, whether or not they ended up in `deploy`; libraries are never
+part of this count, just as they are never part of `deploy` or `skip`. An
+unaffected artifact (`no changes detected`) is not "changed" either, so `skip`
+can hold more than `changed` minus `to deploy` — `changed` only ever equals
+`to deploy` plus the skips an actual change caused, such as a policy block or
+a pin. A publishing apply adds
 a dimmed `Lock file committed with [skip ci]` line after its sentence.
 
 Progress is reported while the work runs, under a plain phase heading such as

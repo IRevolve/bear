@@ -185,8 +185,11 @@ special case with a single code path.
     with no indication they were libraries. **[v5.0.1](releases/v5.0.1.md)
     removed the `changed` section entirely** — every affected artifact now
     appears in exactly one place, `deploy` or `skip`, with libraries
-    tagged `lib` in `skip`. If you are upgrading from pre-v5, upgrade
-    straight to v5.0.1 or later and use its output as the current
+    tagged `lib` in `skip`. **[v5.0.2](releases/v5.0.2.md)** later removed
+    the library from `skip` as well — a library is now visible only
+    indirectly, through the `dependency '<name>' changed` reason on
+    whatever depends on it. If you are upgrading from pre-v5, upgrade
+    straight to v5.0.2 or later and use its output as the current
     reference instead of the section described above.
 
 - **`.bear/plan.yml`'s schema changed.** `PlanFile` gained a `version` field,

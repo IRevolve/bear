@@ -219,16 +219,15 @@ Bear Plan
 
 ────────────────────────────────────────
 Environment: int
-Commit:      68a7fe1
+Commit:      cadc967
 
 deploy (1):
   - api (services/api): new artifact
 
-skip (2):
+skip (1):
   - backoffice (services/backoffice): deployment not enabled for environment int
-  - lib shared (libs/shared): new artifact
 
-Plan complete: 3 changed, 1 to deploy, 2 skipped
+Plan complete: 2 changed, 1 to deploy, 1 skipped
 
 Run 'bear apply' to execute this plan.
 ```
@@ -241,40 +240,47 @@ number of changed files when there are any. Every entry in the plan comes from t
 one source, so it is stated once in the header rather than repeated per artifact.
 
 Each section is labelled with its outcome and entry count (`deploy (1):`,
-`skip (2):`), and its entries are sorted by name so repeated runs
+`skip (1):`), and its entries are sorted by name so repeated runs
 of the same plan produce comparable summaries. An entry is a single line,
 `  - <name> (<path>): <reason>`; the parenthesised path is omitted when the plan
-recorded none. A library entry additionally carries a dim `lib` tag before its
-bold name (`  - lib shared (libs/shared): ...`) so it reads as a library on
-sight, never as a service that simply wasn't deployed; the tag is never shown
-for a regular artifact. Empty sections are omitted.
+recorded none. Empty sections are omitted.
 
 `deploy` lists what apply will actually deploy: its reason is the artifact's
-[change reason](#change-reasons). `skip` is every affected artifact that will
-not deploy, and why — this includes both a would-be deployment blocked by
-policy, such as `no changes detected`, `pinned (use --force to override)`, or
-`deployment not enabled for environment prd`, **and** any artifact or library
-that changed but has no deploy action of its own, most commonly a library
-(libraries are never deployable) but also any artifact whose target defines no
-deploy steps, tagged `lib` in that case. There is no separate "changed" section:
-every artifact affected by a source change appears in exactly one place, either
-`deploy` or `skip`, never both and never neither. Neither `deploy` nor `skip`
-repeats the commit or names a target: the commit is the header's, and the
-target is configuration you can read in `bear.artifact.yml`.
+[change reason](#change-reasons). `skip` is every non-library artifact that
+will not deploy, and why — a would-be deployment blocked by policy, such as
+`no changes detected`, `pinned (use --force to override)`, or `deployment not
+enabled for environment prd`. A library never appears here, or under `deploy`,
+changed or not: libraries are never deployable by design, so listing one would
+read as a missed deployment it never was. A library's own change is visible
+only indirectly, through the `dependency '<name>' changed` reason on whatever
+depends on it — see [Change Reasons](#change-reasons). There is no separate
+"changed" section and no dedicated library section: every non-library artifact
+affected by a source change appears in exactly one place, either `deploy` or
+`skip`, never both and never neither. Neither `deploy` nor `skip` repeats the
+commit or names a target: the commit is the header's, and the target is
+configuration you can read in `bear.artifact.yml`.
 
 The command closes with one sentence,
-`Plan complete: 3 changed, 1 to deploy, 2 skipped`; the skipped count is listed
-only when there are skips, and the changed count is the total number of artifacts
-and libraries affected by a source change — the same set that feeds `deploy` and
-`skip` combined, so `to deploy` + `skipped` always equals `changed`. The
-`Run 'bear apply' to execute this plan.` hint follows only when the plan has
+`Plan complete: 2 changed, 1 to deploy, 1 skipped`; the skipped count is listed
+only when there are skips, and the changed count is however many non-library
+artifacts a source change affected, whether or not they ended up in `deploy` —
+libraries are never part of this count either. An unaffected artifact
+(`no changes detected`) is not "changed", so it can make `skip` larger than
+`changed` minus `to deploy`; `changed` only ever equals `to deploy` plus the
+skips caused by an actual change, such as a policy block or a pin.
+The `Run 'bear apply' to execute this plan.` hint follows only when the plan has
 something to deploy.
 
 A plan with nothing changed and nothing to deploy prints `No changes detected.
 Nothing to plan.` followed by the rule, the `Environment:` line, and any `skip`
 list. That path reports no `Commit:` fact and no closing sentence, because
-nothing was found to plan. A positional artifact filter that matches nothing is
-rejected before any output at all, with `unknown artifact "name"` on stderr.
+nothing was found to plan. This still holds when a library in the project
+changed: a library has no lock history of its own, so it always looks new
+internally, but that alone never keeps a dependent that has nothing else
+changed from being reported as `no changes detected`, and never resurrects the
+short-circuit's "nothing to plan" message on its own. A positional artifact
+filter that matches nothing is rejected before any output at all, with
+`unknown artifact "name"` on stderr.
 
 `bear apply` does not reprint this summary; it logs the deployments it runs and
 lists only failures. See [apply output](apply.md#output).

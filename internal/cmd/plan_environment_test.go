@@ -527,6 +527,91 @@ func TestEnvironmentDependentPlanApply(t *testing.T) {
 	}
 }
 
+// A library is never a deployment candidate, so it never appears in plan's
+// deploy or skip sections, changed or not: a reader only ever learns a
+// library changed indirectly, through the "dependency 'x' changed" reason on
+// whatever depends on it. This holds even though a library, having no lock
+// history of its own, always looks like "new artifact" internally.
+func TestPlanLibraryStaysInvisibleButTriggersDependents(t *testing.T) {
+	// noOwnEntry checks the library never gets a line of its own (as
+	// "- shared" or "shared (shared)"), while still allowing it to appear
+	// inside another artifact's "dependency 'shared' changed" reason.
+	noOwnEntry := func(t *testing.T, output string) {
+		t.Helper()
+		if strings.Contains(output, "- shared") || strings.Contains(output, "shared (shared)") {
+			t.Fatalf("library got an entry of its own: %s", output)
+		}
+	}
+
+	root, path := environmentFixture(t)
+	writeEnvironmentFixture(t, filepath.Join(root, "shared", "bear.lib.yml"), "name: shared\n")
+	writeEnvironmentFixture(t, filepath.Join(root, "allowed", "bear.artifact.yml"), "name: allowed\ntarget: local\ndepends: [shared]\nenvironments: [int]\n")
+	commit := commitEnvironmentFixture(t, root)
+	// Scoped to "allowed" alone: the fixture's own unrelated "disabled"
+	// artifact is permanently ungated-"new" in "int" for a different reason
+	// (policy denies it, so it never accumulates lock history either), which
+	// would otherwise mask what this test is isolating.
+	opts := Options{Environment: "int", Artifacts: []string{"allowed"}, NoCommit: true, Concurrency: 1}
+
+	output, err := captureEnvironmentOutput(t, func() error { return PlanWithOptions(path, opts) })
+	if err != nil {
+		t.Fatalf("plan: %v\n%s", err, output)
+	}
+	noOwnEntry(t, output)
+	plan, err := config.ReadPlan(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Only "allowed" is counted; "shared" the library never is, even though
+	// it is new and would otherwise count as changed.
+	if plan.Changed != 1 || plan.ToDeploy != 1 || len(plan.Artifacts) != 1 || plan.Artifacts[0].Name != "allowed" {
+		t.Fatalf("library counted toward changed/deploy: %+v", plan)
+	}
+	for _, s := range plan.Skipped {
+		if s.Name == "shared" {
+			t.Fatalf("library listed under skip: %+v", plan.Skipped)
+		}
+	}
+	if _, err := captureEnvironmentOutput(t, func() error { return ApplyWithOptions(path, opts) }); err != nil {
+		t.Fatal(err)
+	}
+	if internal.GetCurrentCommit(root) != commit {
+		t.Error("NoCommit changed fixture HEAD")
+	}
+
+	// Change only the library; its dependent must be replanned, and the
+	// library must still never get an entry of its own, even though it is
+	// (as always) internally "new" from the library's own point of view.
+	writeEnvironmentFixture(t, filepath.Join(root, "shared", "version.txt"), "v2\n")
+	commitEnvironmentFixture(t, root)
+	output, err = captureEnvironmentOutput(t, func() error { return PlanWithOptions(path, opts) })
+	if err != nil {
+		t.Fatalf("plan after library change: %v\n%s", err, output)
+	}
+	noOwnEntry(t, output)
+	plan, err = config.ReadPlan(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if plan.ToDeploy != 1 || len(plan.Artifacts) != 1 || plan.Artifacts[0].Name != "allowed" || !strings.Contains(plan.Artifacts[0].Reason, "dependency 'shared' changed") {
+		t.Fatalf("library change did not trigger its dependent: %+v", plan)
+	}
+	if _, err := captureEnvironmentOutput(t, func() error { return ApplyWithOptions(path, opts) }); err != nil {
+		t.Fatal(err)
+	}
+
+	// Nothing left to do: the library's permanent "new artifact" status must
+	// not defeat the "nothing to plan" short-circuit for its dependent.
+	output, err = captureEnvironmentOutput(t, func() error { return PlanWithOptions(path, opts) })
+	if err != nil {
+		t.Fatalf("plan with nothing to do: %v\n%s", err, output)
+	}
+	if !strings.Contains(output, "No changes detected. Nothing to plan.") {
+		t.Fatalf("library's permanent \"new artifact\" status defeated the short-circuit: %s", output)
+	}
+	noOwnEntry(t, output)
+}
+
 func TestSelectionWithoutPolicy(t *testing.T) {
 	root, path := environmentFixture(t)
 	writeEnvironmentFixture(t, filepath.Join(root, "allowed", "bear.artifact.yml"), "name: allowed\ntarget: local\n")
