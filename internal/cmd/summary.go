@@ -17,6 +17,9 @@ type summaryEntry struct {
 	Name   string
 	Path   string
 	Reason string
+	// IsLib tags a library so its reason (e.g. "new artifact") is not
+	// mistaken for a deployable service that simply wasn't deployed.
+	IsLib bool
 }
 
 // summarySection groups entries under one label, such as "deploy" or "skip".
@@ -50,6 +53,7 @@ func skipEntry(skipped config.PlanSkipped) summaryEntry {
 		Name:   skipped.Name,
 		Path:   skipped.Path,
 		Reason: skipped.Reason,
+		IsLib:  skipped.IsLib,
 	}
 }
 
@@ -110,7 +114,11 @@ func printEnvironmentSummary(p *Printer, header summaryHeader, sections ...summa
 			if entry.Path != "" {
 				name = fmt.Sprintf("%s (%s)", entry.Name, entry.Path)
 			}
-			p.Printf("  - %s: %s\n", p.bold(name), entry.Reason)
+			prefix := ""
+			if entry.IsLib {
+				prefix = p.dim("lib") + " "
+			}
+			p.Printf("  - %s%s: %s\n", prefix, p.bold(name), entry.Reason)
 		}
 	}
 }

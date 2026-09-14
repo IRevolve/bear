@@ -151,6 +151,9 @@ func TestEnvironmentPlanApply(t *testing.T) {
 			}
 			// Plan brands itself like apply, reports each job live, then closes
 			// with a rule, aligned facts, counted sections and one sentence.
+			// "disabled" changed but never deploys (policy), so it appears
+			// exactly once, under skip, tagged with its real reason: not as a
+			// separate "changed" line, and not duplicated under deploy either.
 			wantText := []string{
 				"Bear Plan",
 				"Environment: int",
@@ -158,10 +161,6 @@ func TestEnvironmentPlanApply(t *testing.T) {
 				"skip (1):",
 				"- disabled (disabled): deployment not enabled for environment int",
 				fmt.Sprintf("Plan complete: %d changed, %d to deploy, 1 skipped", wantChanged, wantDeploys),
-				// "disabled" always changed but never deploys, so it always shows
-				// up for review even when it is also skipped.
-				"changed (1):",
-				"- disabled (disabled): ",
 			}
 			if wantDeploys > 0 {
 				wantText = append(wantText, "deploy (1):", "- allowed (allowed): ", "Run 'bear apply' to execute this plan.")
@@ -172,11 +171,18 @@ func TestEnvironmentPlanApply(t *testing.T) {
 				}
 			}
 			// Plan never executes anything: no validation phase is reported and
-			// no step runs, for any artifact, deploying or not.
-			for _, gone := range []string{"Validating", "Validation complete", "disabled: Deploying", "allowed: Deploying"} {
+			// no step runs, for any artifact, deploying or not. There is no
+			// separate "changed" section.
+			for _, gone := range []string{"Validating", "Validation complete", "disabled: Deploying", "allowed: Deploying", "changed ("} {
 				if strings.Contains(output, gone) {
 					t.Errorf("plan executed a command (%q): %s", gone, output)
 				}
+			}
+			// "disabled" must never be listed twice (once for its change, once
+			// for its skip): every affected artifact appears in exactly one
+			// section.
+			if n := strings.Count(output, "disabled (disabled):"); n != 1 {
+				t.Errorf("disabled listed %d times, want exactly once: %s", n, output)
 			}
 			// The per-artifact "<commit> => <target>" line is gone: an entry is
 			// one line, and the source belongs to the header.

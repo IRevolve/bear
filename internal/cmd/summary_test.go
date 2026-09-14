@@ -145,7 +145,7 @@ func TestPlural(t *testing.T) {
 // it lives and why it is in this section. Everything a run shares — the commit,
 // the pin, the target — is a header fact, so an entry is one line even for a
 // pinned artifact that carries all of it.
-func TestSummaryEntriesCarryOnlyNamePathAndReason(t *testing.T) {
+func TestSummaryEntriesCarryOnlyNamePathReasonAndLibTag(t *testing.T) {
 	artifact := config.PlanArtifact{
 		Name: "api", Path: "svc/api", Reason: "changed", Target: "local",
 		Pinned: true, PinCommit: "fedcba9876543210",
@@ -156,13 +156,20 @@ func TestSummaryEntriesCarryOnlyNamePathAndReason(t *testing.T) {
 	}
 	// Guard the shape itself: a reintroduced Commit/Target field would silently
 	// bring back the per-artifact second line.
-	if fields := reflect.TypeOf(summaryEntry{}).NumField(); fields != 3 {
-		t.Errorf("summaryEntry has %d fields, want 3 (Name, Path, Reason)", fields)
+	if fields := reflect.TypeOf(summaryEntry{}).NumField(); fields != 4 {
+		t.Errorf("summaryEntry has %d fields, want 4 (Name, Path, Reason, IsLib)", fields)
 	}
 	skipped := config.PlanSkipped{Name: "web", Path: "svc/web", Reason: "not enabled"}
 	wantSkip := summaryEntry{Name: "web", Path: "svc/web", Reason: "not enabled"}
 	if got := skipEntry(skipped); got != wantSkip {
 		t.Errorf("skipEntry = %+v, want %+v", got, wantSkip)
+	}
+	// A library carries its tag through skipEntry, since it never has a
+	// deploy entry to be confused with.
+	lib := config.PlanSkipped{Name: "shared", Path: "libs/shared", Reason: "new artifact", IsLib: true}
+	wantLib := summaryEntry{Name: "shared", Path: "libs/shared", Reason: "new artifact", IsLib: true}
+	if got := skipEntry(lib); got != wantLib {
+		t.Errorf("skipEntry(library) = %+v, want %+v", got, wantLib)
 	}
 	entries := planSkipEntries([]config.PlanSkipped{skipped})
 	if len(entries) != 1 || entries[0] != wantSkip {
@@ -180,6 +187,16 @@ func TestSummaryEntriesCarryOnlyNamePathAndReason(t *testing.T) {
 	wantOutput := summaryRule + "\nEnvironment: prd\nPinned:      fedcba9\n\ndeploy (1):\n  - api (svc/api): changed\n"
 	if out.String() != wantOutput {
 		t.Errorf("entry rendering =\n%s\nwant\n%s", out.String(), wantOutput)
+	}
+	// A library's line is prefixed with a "lib" tag, kept out of the bold
+	// artifact name so nested ANSI resets can't clip the styling.
+	out.Reset()
+	printEnvironmentSummary(p, summaryHeader{Environment: "int"},
+		summarySection{Label: "skip", Color: p.dim, Entries: []summaryEntry{wantLib}},
+	)
+	wantLibOutput := summaryRule + "\nEnvironment: int\n\nskip (1):\n  - lib shared (libs/shared): new artifact\n"
+	if out.String() != wantLibOutput {
+		t.Errorf("library entry rendering =\n%s\nwant\n%s", out.String(), wantLibOutput)
 	}
 }
 

@@ -64,8 +64,9 @@ that was never planned for `int`; enforce a promotion order in CI if you want on
 
 In `bear.artifact.yml`, use `environments: [dev, int]` to allow deployment only in
 those environments. An absent allowlist or `environments: []` means the artifact
-never deploys in any environment; plan still reports it under `changed` when its
-source changed, since that reporting happens before the environment gate. Every
+never deploys in any environment; plan still reports it, under `skip` with the
+policy reason, when its source changed, since that reporting happens after the
+environment gate converts what would have been a deployment into a skip. Every
 allowlist entry must be declared by the project, and one that is not fails the
 whole plan before any output is printed:
 
@@ -217,21 +218,17 @@ Bear Plan
 ─────────
 
 ────────────────────────────────────────
-Environment: prd
-Commit:      0621256
-Changes:     1 file
+Environment: int
+Commit:      68a7fe1
 
 deploy (1):
-  - api (services/api): dependency 'shared' changed
+  - api (services/api): new artifact
 
-changed (2):
-  - shared (libs/shared): new artifact
-  - worker (services/worker): new artifact
+skip (2):
+  - backoffice (services/backoffice): deployment not enabled for environment int
+  - lib shared (libs/shared): new artifact
 
-skip (1):
-  - worker (services/worker): deployment not enabled for environment prd
-
-Plan complete: 3 changed, 1 to deploy, 1 skipped
+Plan complete: 3 changed, 1 to deploy, 2 skipped
 
 Run 'bear apply' to execute this plan.
 ```
@@ -244,27 +241,32 @@ number of changed files when there are any. Every entry in the plan comes from t
 one source, so it is stated once in the header rather than repeated per artifact.
 
 Each section is labelled with its outcome and entry count (`deploy (1):`,
-`changed (2):`, `skip (1):`), and its entries are sorted by name so repeated runs
+`skip (2):`), and its entries are sorted by name so repeated runs
 of the same plan produce comparable summaries. An entry is a single line,
 `  - <name> (<path>): <reason>`; the parenthesised path is omitted when the plan
-recorded none. Empty sections are omitted.
+recorded none. A library entry additionally carries a dim `lib` tag before its
+bold name (`  - lib shared (libs/shared): ...`) so it reads as a library on
+sight, never as a service that simply wasn't deployed; the tag is never shown
+for a regular artifact. Empty sections are omitted.
 
 `deploy` lists what apply will actually deploy: its reason is the artifact's
-[change reason](#change-reasons). `changed` is informational only and is not
-persisted to `.bear/plan.yml` — it lists artifacts and libraries whose source
-changed but that have nothing to deploy, most commonly a library (libraries are
-never deployable) but also any artifact whose target defines no deploy steps.
-`skip` is the recorded reason a would-be deployment did not happen, such as
-`no changes detected`, `pinned (use --force to override)`, or `deployment not
-enabled for environment prd`. Neither `deploy` nor `skip` repeats the commit or
-names a target: the commit is the header's, and the target is configuration you
-can read in `bear.artifact.yml`.
+[change reason](#change-reasons). `skip` is every affected artifact that will
+not deploy, and why — this includes both a would-be deployment blocked by
+policy, such as `no changes detected`, `pinned (use --force to override)`, or
+`deployment not enabled for environment prd`, **and** any artifact or library
+that changed but has no deploy action of its own, most commonly a library
+(libraries are never deployable) but also any artifact whose target defines no
+deploy steps, tagged `lib` in that case. There is no separate "changed" section:
+every artifact affected by a source change appears in exactly one place, either
+`deploy` or `skip`, never both and never neither. Neither `deploy` nor `skip`
+repeats the commit or names a target: the commit is the header's, and the
+target is configuration you can read in `bear.artifact.yml`.
 
 The command closes with one sentence,
-`Plan complete: 3 changed, 1 to deploy, 1 skipped`; the skipped count is listed
+`Plan complete: 3 changed, 1 to deploy, 2 skipped`; the skipped count is listed
 only when there are skips, and the changed count is the total number of artifacts
 and libraries affected by a source change — the same set that feeds `deploy` and
-`changed` combined, whether or not they end up deploying. The
+`skip` combined, so `to deploy` + `skipped` always equals `changed`. The
 `Run 'bear apply' to execute this plan.` hint follows only when the plan has
 something to deploy.
 

@@ -4,30 +4,33 @@
 
 A Terraform-inspired CI/CD tool for monorepos. Detect changes, validate, deploy — only what changed.
 
-**Upgrading to v5.0.0?** It has three breaking changes: deployment environments
+**Upgrading to v5?** v5.0.0 has three breaking changes: deployment environments
 are now declared per project (add a required `environments:` list to
 `bear.config.yml` and make every artifact allowlist a subset of it); `bear plan`
 no longer runs any commands and `bear apply` now always builds immediately
 before it deploys, so a plan file saved before this release is rejected, not
 misapplied; and `bear check` is renamed to `bear doctor`, with no alias.
-`bear.lock.yml` is untouched. Read the
-[v5 upgrade guide](docs/migration-v5.md) and the
-[v5.0.0 release notes](docs/releases/v5.0.0.md). Coming from v3 or earlier? Do the
+`bear.lock.yml` is untouched. v5.0.1 is a pure bug fix on top of that (a
+duplicate/mislabeled `bear plan` summary line), with no policy or behavior
+change — install v5.0.1, not v5.0.0. Read the
+[v5 upgrade guide](docs/migration-v5.md), the
+[v5.0.0 release notes](docs/releases/v5.0.0.md), and the
+[v5.0.1 release notes](docs/releases/v5.0.1.md). Coming from v3 or earlier? Do the
 [v4 migration](docs/migration-v4.md) first: deployment became opt-in per
 environment, legacy history is not automatically migrated, and old plans must be
 recreated.
 
 ## Install
 
-Install the pinned v5.0.0 source with Go 1.25+:
+Install the pinned v5.0.1 source with Go 1.25+:
 
 ```bash
-git clone --branch v5.0.0 --depth 1 https://github.com/irevolve/bear.git bear-v5
-go -C bear-v5 install -ldflags="-X github.com/irevolve/bear/commands.Version=5.0.0" .
+git clone --branch v5.0.1 --depth 1 https://github.com/irevolve/bear.git bear-v5
+go -C bear-v5 install -ldflags="-X github.com/irevolve/bear/commands.Version=5.0.1" .
 ```
 
 Put `$(go env GOPATH)/bin` on `PATH` (or your configured `GOBIN`). Release binaries
-are also available from the [v5.0.0 release](https://github.com/irevolve/bear/releases/tag/v5.0.0).
+are also available from the [v5.0.1 release](https://github.com/irevolve/bear/releases/tag/v5.0.1).
 
 ## Quick Start
 

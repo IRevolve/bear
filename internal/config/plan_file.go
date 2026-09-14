@@ -32,6 +32,9 @@ type PlanSkipped struct {
 	Name   string `yaml:"name"`
 	Path   string `yaml:"path,omitempty"`
 	Reason string `yaml:"reason"`
+	// IsLib marks a library shown for review only: libraries are validated but
+	// never deployed, so they always end up here, never under deploy.
+	IsLib bool `yaml:"is_lib,omitempty"`
 }
 
 // CurrentPlanFileVersion is the schema version written by this binary to

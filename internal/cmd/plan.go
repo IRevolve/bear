@@ -151,8 +151,8 @@ func PlanWithOptions(configPath string, opts Options) (retErr error) {
 	planFile.SourceFingerprint = fingerprint
 
 	// deploying is the set of artifact names that will be deployed, used below
-	// to find changed artifacts (validates) that are not also deploying, such
-	// as libraries or targets with no deploy steps.
+	// to find affected artifacts (validates) that have no deploy action of
+	// their own, such as libraries.
 	deploying := make(map[string]bool, len(deploys))
 	for _, d := range deploys {
 		deploying[d.Artifact.Artifact.Name] = true
@@ -192,31 +192,35 @@ func PlanWithOptions(configPath string, opts Options) (retErr error) {
 		planFile.TotalSkips++
 	}
 
+	// A library, or any artifact affected only because a dependency changed,
+	// gets a validate action with no matching deploy or skip action of its
+	// own (LoadGraph guarantees every non-library target has deploy steps, so
+	// this is libraries only). Fold it into the single skip list instead of a
+	// separate section: every affected artifact then appears in exactly one
+	// place, tagged so a library reads as a library, not a missed deployment.
+	skippedByName := make(map[string]bool, len(planFile.Skipped))
+	for _, s := range planFile.Skipped {
+		skippedByName[s.Name] = true
+	}
+	for _, v := range validates {
+		name := v.Artifact.Artifact.Name
+		if deploying[name] || skippedByName[name] {
+			continue
+		}
+		planFile.Skipped = append(planFile.Skipped, planSkip(v))
+		planFile.TotalSkips++
+	}
+
 	if err := config.WritePlan(rootPath, planFile); err != nil {
 		return fmt.Errorf("error writing plan file: %w", err)
 	}
 
-	// changed collects, for review only, artifacts that changed (were subject
-	// to validation) but have nothing to deploy: libraries and targets with no
-	// deploy steps. Nothing here executes, and nothing here is persisted.
-	var changed []summaryEntry
-	for _, v := range validates {
-		if deploying[v.Artifact.Artifact.Name] {
-			continue
-		}
-		changed = append(changed, summaryEntry{
-			Name:   v.Artifact.Artifact.Name,
-			Path:   v.Artifact.Path,
-			Reason: v.Reason,
-		})
-	}
-
-	printPlanSummary(p, plan, planFile, opts, changed)
+	printPlanSummary(p, plan, planFile, opts)
 
 	return nil
 }
 
-func printPlanSummary(p *Printer, plan *internal.Plan, planFile *config.PlanFile, opts Options, changed []summaryEntry) {
+func printPlanSummary(p *Printer, plan *internal.Plan, planFile *config.PlanFile, opts Options) {
 	header := summaryHeader{Environment: planFile.Environment}
 	// The source is identical for every deployment, so report it once here
 	// instead of repeating it under each artifact.
@@ -239,7 +243,6 @@ func printPlanSummary(p *Printer, plan *internal.Plan, planFile *config.PlanFile
 	p.Blank()
 	printEnvironmentSummary(p, header,
 		summarySection{Label: "deploy", Color: p.cyan, Entries: deploy},
-		summarySection{Label: "changed", Color: p.dim, Entries: changed},
 		summarySection{Label: "skip", Color: p.dim, Entries: planSkipEntries(planFile.Skipped)},
 	)
 
@@ -264,6 +267,7 @@ func planSkip(action internal.PlannedAction) config.PlanSkipped {
 		Name:   action.Artifact.Artifact.Name,
 		Path:   action.Artifact.Path,
 		Reason: action.Reason,
+		IsLib:  action.Artifact.Artifact.IsLib,
 	}
 }
 

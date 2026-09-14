@@ -2,16 +2,16 @@
 
 ## Install
 
-Install the pinned v5.0.0 source with Go 1.25+:
+Install the pinned v5.0.1 source with Go 1.25+:
 
 ```bash
-git clone --branch v5.0.0 --depth 1 https://github.com/irevolve/bear.git bear-v5
-go -C bear-v5 install -ldflags="-X github.com/irevolve/bear/commands.Version=5.0.0" .
+git clone --branch v5.0.1 --depth 1 https://github.com/irevolve/bear.git bear-v5
+go -C bear-v5 install -ldflags="-X github.com/irevolve/bear/commands.Version=5.0.1" .
 ```
 
 Put `$(go env GOPATH)/bin` on `PATH` (or your configured `GOBIN`). Alternatively,
 download the binary for your platform from the
-[v5.0.0 release](https://github.com/irevolve/bear/releases/tag/v5.0.0).
+[v5.0.1 release](https://github.com/irevolve/bear/releases/tag/v5.0.1).
 For an existing monorepo, follow the [v5 migration guide](migration-v5.md) first.
 
 Verify: `bear --version`

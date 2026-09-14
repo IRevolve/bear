@@ -92,7 +92,7 @@ Configure the multibranch script path as `examples/Jenkinsfile` or
 `examples/Jenkinsfile.docker`; see [Jenkins Freeze/Unfreeze
 Template](#jenkins-freezeunfreeze-template) below for the separate,
 parameter-driven `examples/Jenkinsfile.freeze`. For the host-agent template,
-provide `BEAR_VERSION` as a reviewed release tag such as `v5.0.0`,
+provide `BEAR_VERSION` as a reviewed release tag such as `v5.0.1`,
 and put `$(go env GOPATH)/bin` on the agent PATH. Its `Install` stage installs from
 a tagged checkout outside the workspace because the Go module has no `/v4` suffix.
 The Docker template expects the

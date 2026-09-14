@@ -176,6 +176,19 @@ special case with a single code path.
   section appears between `deploy` and `skip`, listing artifacts and libraries
   whose source changed but that have nothing to deploy. Update any script or
   dashboard that greps plan's log for the old strings.
+
+!!! bug "Fixed in v5.0.1"
+    As shipped in v5.0.0, that `changed (N):` section had a bug: it also
+    listed artifacts whose deploy action environment policy had converted
+    to a skip, so they appeared twice (there and under `skip`, with
+    different reasons), and it gave changed libraries a generic reason
+    with no indication they were libraries. **[v5.0.1](releases/v5.0.1.md)
+    removed the `changed` section entirely** — every affected artifact now
+    appears in exactly one place, `deploy` or `skip`, with libraries
+    tagged `lib` in `skip`. If you are upgrading from pre-v5, upgrade
+    straight to v5.0.1 or later and use its output as the current
+    reference instead of the section described above.
+
 - **`.bear/plan.yml`'s schema changed.** `PlanFile` gained a `version` field,
   stamped by every plan and checked by every apply before anything else runs.
   `PlanFile.validated` is renamed to `changed`. Each `PlanArtifact` gained

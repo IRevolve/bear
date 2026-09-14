@@ -503,8 +503,8 @@ remaining ones, and apply is not atomic or ordered. See
 
 The two commands deliberately print different endings. `bear plan` prints its
 branding header, then immediately the rule, its `Environment:`/`Commit:` facts,
-its `deploy`/`changed`/`skip` lists, and
-`Plan complete: 3 changed, 1 to deploy, 1 skipped`: that block is the artifact a
+its `deploy`/`skip` lists, and
+`Plan complete: 3 changed, 1 to deploy, 2 skipped`: that block is the artifact a
 reviewer approves, produced without running anything. `bear apply` does not
 repeat it. A successful apply is the phase
 heading, the job lines, and `Apply complete: 1 deployed, 1 skipped in 0s`; only a
